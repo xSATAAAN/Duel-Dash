@@ -80,6 +80,8 @@ function playerPayload(profile, clientId) {
   };
 }
 
+const QUICK_ROOM_CODES = ["ARENA1", "ARENA2", "ARENA3", "ARENA4"];
+
 function normalizeRoomCode(code) {
   return String(code || "")
     .toUpperCase()
@@ -178,7 +180,12 @@ export function subscribeRoom(code, callback) {
 export async function syncPlayerProfile(code, profile) {
   const normalized = normalizeRoomCode(code);
   await update(roomRef(normalized), {
-    [`players/${clientId}`]: playerPayload(profile, clientId),
+    [`players/${clientId}/name`]: profile.name,
+    [`players/${clientId}/avatarId`]: profile.avatarId || null,
+    [`players/${clientId}/bladeId`]: profile.bladeId || null,
+    [`players/${clientId}/skinId`]: profile.skinId || null,
+    [`players/${clientId}/level`]: profile.level,
+    [`players/${clientId}/restoreCode`]: profile.restoreCode || null,
     updatedAt: serverTimestamp(),
   });
   onDisconnect(playerRef(normalized, clientId)).remove();
@@ -260,4 +267,79 @@ export async function sendRoomAction(code, actionType) {
     type: actionType,
     createdAt: serverTimestamp(),
   });
+}
+
+export async function findOrCreateArenaRoom(profile) {
+  const roomsSnapshot = await get(ref(database, "rooms"));
+  const rooms = roomsSnapshot.val() || {};
+
+  for (const code of QUICK_ROOM_CODES) {
+    const room = rooms[code];
+    if (!room || room.mode !== "canvas-arena") {
+      continue;
+    }
+
+    const players = room.players || {};
+    const joinedAlready = Boolean(players[clientId]);
+    const playerCount = Object.keys(players).length;
+
+    if (joinedAlready) {
+      await syncPlayerProfile(code, profile);
+      return code;
+    }
+
+    if (playerCount < 2) {
+      await joinRoom(profile, code);
+      await update(roomRef(code), {
+        mode: "canvas-arena",
+        status: "arena",
+        updatedAt: serverTimestamp(),
+      });
+      return code;
+    }
+  }
+
+  for (const code of QUICK_ROOM_CODES) {
+    if (rooms[code]) {
+      continue;
+    }
+
+    try {
+      await createRoom(profile, code);
+      await update(roomRef(code), {
+        mode: "canvas-arena",
+        status: "arena",
+        updatedAt: serverTimestamp(),
+      });
+      return code;
+    } catch {}
+  }
+
+  for (const code of QUICK_ROOM_CODES) {
+    try {
+      await joinRoom(profile, code);
+      await update(roomRef(code), {
+        mode: "canvas-arena",
+        status: "arena",
+        updatedAt: serverTimestamp(),
+      });
+      return code;
+    } catch {}
+  }
+
+  throw new Error("جميع الساحات السريعة ممتلئة الآن.");
+}
+
+export async function syncPlayerPosition(code, position) {
+  const normalized = normalizeRoomCode(code);
+  await update(roomRef(normalized), {
+    [`players/${clientId}/position`]: {
+      x: Number(position.x || 0),
+      y: Number(position.y || 0),
+      direction: Number(position.direction) === -1 ? -1 : 1,
+      updatedAt: serverTimestamp(),
+    },
+    updatedAt: serverTimestamp(),
+  });
+  onDisconnect(playerRef(normalized, clientId)).remove();
 }
