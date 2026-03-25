@@ -2506,7 +2506,7 @@ function renderRoomsGame() {
   `;
 }
 
-function renderDuelGame() {
+function renderDuelLegacy() {
   const duel = state.duel;
   if (!duel) {
     return "";
