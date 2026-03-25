@@ -1,4 +1,4 @@
-const CACHE_NAME = "duel-dash-cache-v5";
+const CACHE_NAME = "duel-dash-cache-v6";
 const ASSETS = [
   "./",
   "./index.html",

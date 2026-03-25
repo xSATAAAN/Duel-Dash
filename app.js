@@ -142,11 +142,13 @@ const uiRuntime = {
   shakeUntil: 0,
   shakeIntensity: 6,
   floatingTexts: [],
+  resultTicker: null,
 };
 
 const audioRuntime = {
   unlocked: false,
-  lobbyTrack: null,
+  lobbyTimer: null,
+  lobbyStep: 0,
 };
 
 const app = document.getElementById("app");
@@ -167,9 +169,7 @@ async function tryLockLandscape() {
   orientationLockAttempted = true;
   try {
     await orientationApi.lock("landscape");
-  } catch (error) {
-    console.error(error);
-  }
+  } catch {}
 }
 
 function preloadImage(url) {
@@ -219,57 +219,274 @@ async function bootAssets() {
   render();
 }
 
-function unlockAudio() {
-  if (audioRuntime.unlocked) {
+function getAudioContext() {
+  const AudioContextCtor = globalThis.AudioContext || globalThis.webkitAudioContext;
+  if (!AudioContextCtor) {
+    return null;
+  }
+
+  if (!audioCtx) {
+    audioCtx = new AudioContextCtor();
+  }
+
+  return audioCtx;
+}
+
+async function unlockAudio() {
+  const context = getAudioContext();
+  if (!context) {
     return;
   }
-  audioRuntime.unlocked = true;
+
+  try {
+    if (context.state === "suspended") {
+      await context.resume();
+    }
+    audioRuntime.unlocked = context.state === "running";
+  } catch {
+    audioRuntime.unlocked = false;
+  }
+
+  syncAudioForScreen();
+}
+
+function createSynthVoice({
+  type = "triangle",
+  frequency = 220,
+  endFrequency = frequency,
+  duration = 0.14,
+  volume = 0.035,
+  attack = 0.006,
+  hold = 0.04,
+  delay = 0,
+  pan = 0,
+} = {}) {
+  if (!settings.sound || !audioRuntime.unlocked) {
+    return;
+  }
+
+  const context = getAudioContext();
+  if (!context || context.state !== "running") {
+    return;
+  }
+
+  const oscillator = context.createOscillator();
+  const gain = context.createGain();
+  const stereo = context.createStereoPanner ? context.createStereoPanner() : null;
+  const startedAt = context.currentTime + delay;
+  const releaseAt = startedAt + duration;
+  const peakAt = startedAt + attack;
+  const sustainAt = Math.min(releaseAt - 0.02, peakAt + hold);
+
+  oscillator.type = type;
+  oscillator.frequency.setValueAtTime(Math.max(40, frequency), startedAt);
+  oscillator.frequency.exponentialRampToValueAtTime(Math.max(40, endFrequency), releaseAt);
+
+  gain.gain.setValueAtTime(0.0001, startedAt);
+  gain.gain.exponentialRampToValueAtTime(Math.max(0.0002, volume), peakAt);
+  gain.gain.exponentialRampToValueAtTime(Math.max(0.0002, volume * 0.52), sustainAt);
+  gain.gain.exponentialRampToValueAtTime(0.0001, releaseAt);
+
+  if (stereo) {
+    stereo.pan.setValueAtTime(Math.max(-1, Math.min(1, pan)), startedAt);
+    oscillator.connect(gain);
+    gain.connect(stereo);
+    stereo.connect(context.destination);
+  } else {
+    oscillator.connect(gain);
+    gain.connect(context.destination);
+  }
+
+  oscillator.start(startedAt);
+  oscillator.stop(releaseAt + 0.02);
+}
+
+function createNoiseBurst({
+  duration = 0.11,
+  volume = 0.03,
+  delay = 0,
+  pan = 0,
+  highpass = 280,
+  lowpass = 2400,
+} = {}) {
+  if (!settings.sound || !audioRuntime.unlocked) {
+    return;
+  }
+
+  const context = getAudioContext();
+  if (!context || context.state !== "running") {
+    return;
+  }
+
+  const frameCount = Math.max(1, Math.floor(context.sampleRate * duration));
+  const buffer = context.createBuffer(1, frameCount, context.sampleRate);
+  const channel = buffer.getChannelData(0);
+  for (let index = 0; index < frameCount; index += 1) {
+    channel[index] = (Math.random() * 2 - 1) * (1 - index / frameCount);
+  }
+
+  const source = context.createBufferSource();
+  const gain = context.createGain();
+  const high = context.createBiquadFilter();
+  const low = context.createBiquadFilter();
+  const stereo = context.createStereoPanner ? context.createStereoPanner() : null;
+  const startedAt = context.currentTime + delay;
+  const releaseAt = startedAt + duration;
+
+  source.buffer = buffer;
+  high.type = "highpass";
+  high.frequency.setValueAtTime(highpass, startedAt);
+  low.type = "lowpass";
+  low.frequency.setValueAtTime(lowpass, startedAt);
+  gain.gain.setValueAtTime(Math.max(0.0001, volume), startedAt);
+  gain.gain.exponentialRampToValueAtTime(0.0001, releaseAt);
+
+  if (stereo) {
+    stereo.pan.setValueAtTime(Math.max(-1, Math.min(1, pan)), startedAt);
+    source.connect(high);
+    high.connect(low);
+    low.connect(gain);
+    gain.connect(stereo);
+    stereo.connect(context.destination);
+  } else {
+    source.connect(high);
+    high.connect(low);
+    low.connect(gain);
+    gain.connect(context.destination);
+  }
+
+  source.start(startedAt);
+  source.stop(releaseAt + 0.02);
+}
+
+function playSynthTone(type) {
+  if (!settings.sound || !audioRuntime.unlocked) {
+    return;
+  }
+
+  const recipes = {
+    ui: () => {
+      createSynthVoice({ type: "square", frequency: 720, endFrequency: 520, duration: 0.08, volume: 0.018 });
+    },
+    hit: () => {
+      createNoiseBurst({ duration: 0.08, volume: 0.02, highpass: 460, lowpass: 2800, pan: 0.08 });
+      createSynthVoice({ type: "triangle", frequency: 180, endFrequency: 110, duration: 0.11, volume: 0.03, pan: 0.08 });
+    },
+    hurt: () => {
+      createNoiseBurst({ duration: 0.1, volume: 0.024, highpass: 180, lowpass: 1600, pan: -0.1 });
+      createSynthVoice({ type: "sawtooth", frequency: 240, endFrequency: 120, duration: 0.16, volume: 0.028, pan: -0.12 });
+    },
+    dash: () => {
+      createSynthVoice({ type: "triangle", frequency: 240, endFrequency: 520, duration: 0.1, volume: 0.02, pan: 0.02 });
+    },
+    special: () => {
+      createSynthVoice({ type: "square", frequency: 190, endFrequency: 540, duration: 0.18, volume: 0.03, pan: 0.12 });
+      createSynthVoice({ type: "triangle", frequency: 120, endFrequency: 240, duration: 0.22, volume: 0.02, delay: 0.03, pan: 0.12 });
+      createNoiseBurst({ duration: 0.12, volume: 0.018, delay: 0.02, highpass: 600, lowpass: 4200, pan: 0.12 });
+    },
+    miss: () => {
+      createSynthVoice({ type: "square", frequency: 170, endFrequency: 118, duration: 0.09, volume: 0.016 });
+    },
+    win: () => {
+      [392, 494, 659].forEach((frequency, index) => {
+        createSynthVoice({
+          type: "triangle",
+          frequency,
+          endFrequency: frequency * 1.03,
+          duration: 0.18,
+          volume: 0.022,
+          delay: index * 0.09,
+        });
+      });
+    },
+    loss: () => {
+      [220, 174, 130].forEach((frequency, index) => {
+        createSynthVoice({
+          type: "sawtooth",
+          frequency,
+          endFrequency: Math.max(60, frequency * 0.82),
+          duration: 0.22,
+          volume: 0.02,
+          delay: index * 0.1,
+        });
+      });
+    },
+  };
+
+  const recipe = recipes[type];
+  if (recipe) {
+    recipe();
+  }
 }
 
 function playSfx(kind) {
-  if (!settings.sound) {
-    return;
-  }
-  const source = ASSET_URLS.audio[kind];
-  if (audioRuntime.unlocked && source) {
-    const audio = new Audio(source);
-    audio.volume = kind === "lobbyBgm" ? 0.32 : 0.74;
-    audio.play().catch(() => {});
-    return;
-  }
-
   const toneMap = {
+    ui: "ui",
     hit: "hit",
+    hurt: "hurt",
     dash: "dash",
     special: "special",
+    miss: "miss",
     win: "win",
     loss: "loss",
   };
-  if (toneMap[kind]) {
-    playTone(toneMap[kind]);
+
+  const tone = toneMap[kind];
+  if (tone) {
+    playSynthTone(tone);
   }
 }
 
 function startLobbyMusic() {
-  if (!audioRuntime.unlocked || !ASSET_URLS.audio.lobbyBgm) {
+  if (!settings.sound || !audioRuntime.unlocked || audioRuntime.lobbyTimer) {
     return;
   }
 
-  if (!audioRuntime.lobbyTrack) {
-    audioRuntime.lobbyTrack = new Audio(ASSET_URLS.audio.lobbyBgm);
-    audioRuntime.lobbyTrack.loop = true;
-    audioRuntime.lobbyTrack.volume = 0.26;
-  }
+  const notes = [220, 277, 330, 392, 330, 277];
+  audioRuntime.lobbyStep = 0;
 
-  audioRuntime.lobbyTrack.play().catch(() => {});
+  const pulse = () => {
+    if (state.screen === "duel" || !audioRuntime.unlocked || document.hidden) {
+      stopLobbyMusic();
+      return;
+    }
+
+    const note = notes[audioRuntime.lobbyStep % notes.length];
+    const pan = audioRuntime.lobbyStep % 2 === 0 ? -0.16 : 0.16;
+    createSynthVoice({
+      type: "triangle",
+      frequency: note,
+      endFrequency: note * 1.012,
+      duration: 0.18,
+      volume: 0.012,
+      pan,
+    });
+
+    if (audioRuntime.lobbyStep % 3 === 0) {
+      createSynthVoice({
+        type: "sine",
+        frequency: note / 2,
+        endFrequency: note / 2,
+        duration: 0.24,
+        volume: 0.009,
+        pan: -pan * 0.6,
+      });
+    }
+
+    audioRuntime.lobbyStep += 1;
+  };
+
+  pulse();
+  audioRuntime.lobbyTimer = setInterval(pulse, 320);
 }
 
 function stopLobbyMusic() {
-  if (!audioRuntime.lobbyTrack) {
+  if (!audioRuntime.lobbyTimer) {
     return;
   }
-  audioRuntime.lobbyTrack.pause();
-  audioRuntime.lobbyTrack.currentTime = 0;
+
+  clearInterval(audioRuntime.lobbyTimer);
+  audioRuntime.lobbyTimer = null;
 }
 
 function syncAudioForScreen() {
@@ -311,15 +528,32 @@ function spawnFloatingText(side, value, variant = "damage") {
   showFloatingText(x, y, text, variant);
 }
 
+function clearResultTicker() {
+  if (!uiRuntime.resultTicker) {
+    return;
+  }
+
+  clearInterval(uiRuntime.resultTicker);
+  uiRuntime.resultTicker = null;
+}
+
 window.addEventListener(
   "pointerdown",
   () => {
-    unlockAudio();
-    syncAudioForScreen();
+    void unlockAudio();
     void tryLockLandscape();
   },
   { once: true },
 );
+
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) {
+    stopLobbyMusic();
+    return;
+  }
+
+  syncAudioForScreen();
+});
 
 function hydrateState() {
   try {
@@ -466,7 +700,7 @@ function createProfile({ name, avatarId, bladeId }) {
 
 function addProgress(result) {
   if (!state.profile) {
-    return;
+    return { rewards: { xp: 0, coins: 0 }, unlockedSkin: null };
   }
 
   const profile = state.profile;
@@ -492,12 +726,78 @@ function addProgress(result) {
     }
   }
 
-  if (unlocked) {
-    state.overlay = { type: "unlock", skinId: unlocked.id };
-  }
-
   saveState();
   void syncCurrentRoomProfile();
+
+  return {
+    rewards,
+    unlockedSkin: unlocked,
+  };
+}
+
+function animateMatchRewards() {
+  clearResultTicker();
+
+  if (state.overlay?.type !== "result") {
+    return;
+  }
+
+  const startedAt = Date.now();
+  uiRuntime.resultTicker = setInterval(() => {
+    if (state.overlay?.type !== "result") {
+      clearResultTicker();
+      return;
+    }
+
+    const progress = Math.min(1, (Date.now() - startedAt) / 900);
+    const eased = 1 - (1 - progress) ** 3;
+    state.overlay.displayXp = Math.round(state.overlay.xpGain * eased);
+    state.overlay.displayCoins = Math.round(state.overlay.coinsGain * eased);
+    render();
+
+    if (progress >= 1) {
+      clearResultTicker();
+    }
+  }, 48);
+}
+
+function showMatchResolution(duel, result, progress) {
+  const rewards = progress?.rewards || { xp: 0, coins: 0 };
+  const unlockedSkin = progress?.unlockedSkin || null;
+  state.toast = "";
+  state.overlay = {
+    type: "result",
+    result,
+    title: result === "win" ? "انتصار" : "هزيمة",
+    subtitle:
+      result === "win"
+        ? `حسمت الجولة ضد ${duel?.rival?.name || "الخصم"} وسيطرت على الساحة.`
+        : `${duel?.rival?.name || "الخصم"} أنهى الجولة لصالحه. تمت إضافة مكافآت المشاركة.`,
+    xpGain: rewards.xp,
+    coinsGain: rewards.coins,
+    displayXp: 0,
+    displayCoins: 0,
+    unlockedSkinId: unlockedSkin?.id || "",
+  };
+  animateMatchRewards();
+}
+
+function returnToLobby() {
+  clearResultTicker();
+  clearTimeout(dismissToastTimeout);
+  state.toast = "";
+  if (state.overlay?.type === "result") {
+    state.overlay = null;
+  }
+
+  if (state.duel?.mode !== "room") {
+    state.duel = null;
+  }
+
+  clearDuelTimers();
+  state.screen = "home";
+  saveState();
+  render();
 }
 
 function trimRewardedMatches() {
@@ -660,13 +960,6 @@ function applyRoomFxFromLatestAction(room) {
     until: Date.now() + 260,
   };
 
-  const tone = latestAction.type === "special" ? "special" : latestAction.type === "dash" ? "dash" : "hit";
-  if (latestAction.type === "special") {
-    triggerScreenShake(10);
-  } else if (latestAction.type === "attack") {
-    triggerScreenShake(6);
-  }
-  playSfx(tone);
   return true;
 }
 
@@ -738,10 +1031,13 @@ function applyRoomMatchRewards(duel) {
     return;
   }
 
-  addProgress(duel.winner === "player" ? "win" : "loss");
+  const result = duel.winner === "player" ? "win" : "loss";
+  const progress = addProgress(result);
   state.rewardedMatchIds.push(duel.matchId);
   trimRewardedMatches();
   saveState();
+  playSfx(result);
+  showMatchResolution(duel, result, progress);
   showToast(duel.winner === "player" ? "فزت بمواجهة الغرفة وتمت إضافة المكافآت." : "خسرت مواجهة الغرفة وتمت إضافة المكافآت.");
 }
 
@@ -831,16 +1127,20 @@ async function attachRoomSubscription(code) {
         if (roomRuntime.latestActionType === "dash") {
           nextFx[actorKey] = "evade";
           triggerCombatMotion(actorKey, defenderKey, "dash");
+          playSfx("dash");
         } else if (playerDelta > 0 || rivalDelta > 0) {
           const damage = actorKey === "player" ? rivalDelta : playerDelta;
+          const actionType = roomRuntime.latestActionType || "attack";
           nextFx[actorKey] = roomRuntime.latestActionType || "attack";
           nextFx[defenderKey] = "hit";
-          triggerCombatMotion(actorKey, defenderKey, roomRuntime.latestActionType || "attack", false, damage);
-          triggerScreenShake((roomRuntime.latestActionType || "attack") === "special" ? 10 : 6);
+          triggerCombatMotion(actorKey, defenderKey, actionType, false, damage);
+          triggerScreenShake(actionType === "special" ? 10 : 6);
+          playSfx(defenderKey === "player" ? "hurt" : actionType === "special" ? "special" : "hit");
         } else if (roomRuntime.latestActionType) {
           nextFx[actorKey] = roomRuntime.latestActionType;
           nextFx[defenderKey] = "evade";
           triggerCombatMotion(actorKey, defenderKey, roomRuntime.latestActionType, true);
+          playSfx("miss");
         }
 
         roomRuntime.fx = nextFx;
@@ -1018,17 +1318,19 @@ function finishDuel() {
     duel.winner = duel.player.hp > duel.rival.hp ? "player" : "rival";
   }
 
+  const result = duel.winner === "player" ? "win" : "loss";
+  const progress = addProgress(result);
+
   if (duel.winner === "player") {
     pushLog(`${state.profile.name} حسم المعركة وسيطر على الساحة.`, "win");
-    addProgress("win");
     playSfx("win");
   } else {
     pushLog(`${duel.rival.name} خطف المباراة في اللحظة الأخيرة.`, "loss");
-    addProgress("loss");
     playSfx("loss");
   }
 
   clearDuelTimers();
+  showMatchResolution(duel, result, progress);
   saveState();
   render();
 }
@@ -1073,7 +1375,7 @@ function resolveAction(attackerKey, defenderKey, action) {
     defender.evadeUntil = 0;
     pushLog(`${defender.name} تفادى هجمة ${attacker.name}.`, "evade");
     triggerCombatMotion(attackerKey, defenderKey, action, true);
-    playTone("miss");
+    playSfx("miss");
   } else {
     const damage = damageRoll(action, actorBladeId);
     defender.hp = Math.max(0, defender.hp - damage);
@@ -1087,7 +1389,7 @@ function resolveAction(attackerKey, defenderKey, action) {
       `${attacker.name} وجه ${action === "special" ? "الضربة الخاصة" : "ضربة مباشرة"} بقيمة ${damage}.`,
       action === "special" ? "special" : "hit",
     );
-    playSfx(action === "special" ? "special" : "hit");
+    playSfx(defenderKey === "player" ? "hurt" : action === "special" ? "special" : "hit");
   }
 
   if (defender.hp <= 0) {
@@ -1180,6 +1482,8 @@ function clearDuelTimers() {
 }
 
 function startPracticeDuel() {
+  clearResultTicker();
+  state.overlay = null;
   state.screen = "duel";
   state.duel = createDuel("practice", "روغ فلوكس");
   render();
@@ -1254,6 +1558,11 @@ async function leaveActiveRoom() {
     return;
   }
 
+  clearResultTicker();
+  if (state.overlay?.type === "result") {
+    state.overlay = null;
+  }
+
   try {
     const api = await loadFirebaseApi();
     await api.leaveRoom(state.roomCodeActive);
@@ -1318,6 +1627,8 @@ function restoreHashRoom() {
 
 function resetProgress() {
   clearDuelTimers();
+  clearResultTicker();
+  stopLobbyMusic();
   localStorage.removeItem(STORAGE_KEY);
   state = cloneValue(defaultState);
   detachRoomSubscription();
@@ -1325,39 +1636,7 @@ function resetProgress() {
 }
 
 function playTone(type) {
-  if (!settings.sound) {
-    return;
-  }
-  const AudioContextCtor = globalThis.AudioContext || globalThis.webkitAudioContext;
-  if (!AudioContextCtor) {
-    return;
-  }
-  const context = audioCtx || new AudioContextCtor();
-  audioCtx = context;
-  const oscillator = context.createOscillator();
-  const gain = context.createGain();
-
-  const tones = {
-    hit: [280, 180],
-    special: [190, 380],
-    dash: [410, 560],
-    miss: [120, 90],
-    win: [280, 360],
-    loss: [160, 110],
-  };
-
-  const [startFreq, endFreq] = tones[type] || [260, 180];
-
-  oscillator.type = type === "special" ? "square" : "triangle";
-  oscillator.frequency.setValueAtTime(startFreq, context.currentTime);
-  oscillator.frequency.exponentialRampToValueAtTime(endFreq, context.currentTime + 0.18);
-  gain.gain.setValueAtTime(0.0001, context.currentTime);
-  gain.gain.exponentialRampToValueAtTime(0.05, context.currentTime + 0.02);
-  gain.gain.exponentialRampToValueAtTime(0.0001, context.currentTime + 0.18);
-  oscillator.connect(gain);
-  gain.connect(context.destination);
-  oscillator.start();
-  oscillator.stop(context.currentTime + 0.2);
+  playSynthTone(type);
 }
 
 function levelProgress() {
@@ -2363,7 +2642,7 @@ function renderDuelGame() {
 
   return `
     <section class="game-screen duel-screen reveal">
-      <article class="battle-shell ${uiRuntime.shakeUntil > Date.now() ? "is-shaking" : ""}" style="--shake-intensity:${uiRuntime.shakeIntensity}px;">
+      <article class="battle-shell ${uiRuntime.shakeUntil > Date.now() ? "is-shaking" : ""} ${duel.status === "done" ? "is-finished" : ""}" style="--shake-intensity:${uiRuntime.shakeIntensity}px;">
         <div class="battle-backdrop">
           <span class="battle-layer layer-far"></span>
           <span class="battle-layer layer-mid"></span>
@@ -2562,6 +2841,55 @@ function unlockOverlayGame() {
   `;
 }
 
+function resultOverlayGame() {
+  if (state.overlay?.type !== "result") {
+    return "";
+  }
+
+  const unlockedSkin = state.overlay.unlockedSkinId ? skinById(state.overlay.unlockedSkinId) : null;
+  const isWin = state.overlay.result === "win";
+
+  return `
+    <div class="overlay result-overlay">
+      <div class="sheet result-sheet ${isWin ? "is-win" : "is-loss"}" onclick="event.stopPropagation()">
+        <div class="result-aura"></div>
+        <div class="result-head">
+          <span class="result-kicker">${isWin ? "DUEL WON" : "DUEL OVER"}</span>
+          <strong>${state.overlay.title}</strong>
+          <p>${state.overlay.subtitle}</p>
+        </div>
+
+        <div class="result-reward-grid">
+          <div class="result-reward-card xp">
+            <span>XP</span>
+            <strong>+${state.overlay.displayXp}</strong>
+          </div>
+          <div class="result-reward-card coin">
+            <span>Coins</span>
+            <strong>+${state.overlay.displayCoins}</strong>
+          </div>
+        </div>
+
+        ${
+          unlockedSkin
+            ? `
+              <div class="result-unlock-card">
+                <img src="${getSkinImage(unlockedSkin.id)}" alt="${localizedSkin(unlockedSkin.id)}" />
+                <div>
+                  <span>تم فتح سكن جديد</span>
+                  <strong>${localizedSkin(unlockedSkin.id)}</strong>
+                </div>
+              </div>
+            `
+            : ""
+        }
+
+        <button class="btn btn-play result-return-btn" data-result-action="lobby">العودة للوبي</button>
+      </div>
+    </div>
+  `;
+}
+
 function renderToastGame() {
   return `
     <div class="toast-wrap ${state.toast ? "" : "hide"}">
@@ -2635,11 +2963,13 @@ function render(attachEvents = true) {
     </main>
     ${
       bootRuntime.ready
-        ? state.overlay?.type === "locker"
-          ? lockerOverlayGame()
-          : state.overlay?.type === "unlock"
-            ? unlockOverlayGame()
-            : ""
+        ? state.overlay?.type === "result"
+          ? resultOverlayGame()
+          : state.overlay?.type === "locker"
+            ? lockerOverlayGame()
+            : state.overlay?.type === "unlock"
+              ? unlockOverlayGame()
+              : ""
         : ""
     }
     ${renderToastGame()}
@@ -2663,6 +2993,12 @@ function bindChoiceCards(form, selector, inputName, datasetKey, activeClass = "i
 }
 
 function bindEvents() {
+  document.querySelectorAll("button:not([data-action])").forEach((button) => {
+    button.addEventListener("click", () => {
+      playSfx("ui");
+    });
+  });
+
   const onboardingForm = document.getElementById("onboarding-form");
   if (onboardingForm) {
     bindChoiceCards(onboardingForm, "[data-avatar]", "avatarId", "avatar");
@@ -2807,6 +3143,12 @@ function bindEvents() {
     button.addEventListener("click", () => {
       state.screen = "rooms";
       render();
+    });
+  });
+
+  document.querySelectorAll("[data-result-action='lobby']").forEach((button) => {
+    button.addEventListener("click", () => {
+      returnToLobby();
     });
   });
 }
