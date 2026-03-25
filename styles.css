@@ -1656,3 +1656,225 @@ input:focus {
     width: min(38vw, 240px);
   }
 }
+
+.floating-text {
+  bottom: auto;
+  transform: translateX(-50%);
+  pointer-events: none;
+  font-weight: 800;
+}
+
+.battle-health-card.hit {
+  animation: hudHitFlash 220ms ease;
+}
+
+.battle-health-card.special {
+  animation: hudPulse 260ms ease;
+}
+
+.arena-player.attack .combatant-svg {
+  animation: lungePlayer 220ms ease;
+}
+
+.arena-rival.attack .combatant-svg {
+  animation: lungeRival 220ms ease;
+}
+
+.arena-player.special .combatant-svg {
+  animation: specialLungePlayer 280ms ease;
+}
+
+.arena-rival.special .combatant-svg {
+  animation: specialLungeRival 280ms ease;
+}
+
+.arena-player.hit .combatant-svg {
+  animation: hitReactPlayer 220ms ease;
+}
+
+.arena-rival.hit .combatant-svg {
+  animation: hitReactRival 220ms ease;
+}
+
+.shield-effect {
+  position: absolute;
+  top: 28%;
+  width: 90px;
+  height: 110px;
+  opacity: 0;
+  border-radius: 50% 50% 42% 42%;
+  border: 2px solid rgba(114, 231, 255, 0.9);
+  background:
+    radial-gradient(circle at 50% 40%, rgba(203, 249, 255, 0.35), rgba(89, 211, 255, 0.08) 58%, rgba(89, 211, 255, 0) 100%);
+  box-shadow:
+    0 0 20px rgba(89, 211, 255, 0.28),
+    inset 0 0 20px rgba(203, 249, 255, 0.18);
+  transition: opacity 120ms ease;
+  pointer-events: none;
+}
+
+.arena-player .shield-effect {
+  right: -8px;
+}
+
+.arena-rival .shield-effect {
+  left: -8px;
+}
+
+.arena-player.evade .shield-effect,
+.arena-rival.evade .shield-effect {
+  opacity: 1;
+  animation: shieldPulse 280ms ease;
+}
+
+.ability-card.attack {
+  border-color: rgba(255, 111, 70, 0.28);
+}
+
+.ability-card.dash {
+  border-color: rgba(89, 211, 255, 0.28);
+}
+
+.ability-card.special {
+  border-color: rgba(255, 211, 110, 0.28);
+}
+
+.is-shaking {
+  animation: screenShakeVar 260ms linear;
+}
+
+@keyframes screenShakeVar {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+  20% {
+    transform: translate3d(calc(var(--shake-intensity, 6px) * -0.8), 1px, 0);
+  }
+  40% {
+    transform: translate3d(calc(var(--shake-intensity, 6px) * 0.8), -2px, 0);
+  }
+  60% {
+    transform: translate3d(calc(var(--shake-intensity, 6px) * -0.6), 2px, 0);
+  }
+  80% {
+    transform: translate3d(calc(var(--shake-intensity, 6px) * 0.6), -1px, 0);
+  }
+}
+
+@keyframes lungePlayer {
+  0% {
+    transform: translateX(0);
+  }
+  35% {
+    transform: translateX(18px);
+  }
+  100% {
+    transform: translateX(0);
+  }
+}
+
+@keyframes lungeRival {
+  0% {
+    transform: translateX(0);
+  }
+  35% {
+    transform: translateX(-18px);
+  }
+  100% {
+    transform: translateX(0);
+  }
+}
+
+@keyframes specialLungePlayer {
+  0% {
+    transform: translateX(0) scale(1);
+  }
+  35% {
+    transform: translateX(28px) scale(1.03);
+  }
+  100% {
+    transform: translateX(0) scale(1);
+  }
+}
+
+@keyframes specialLungeRival {
+  0% {
+    transform: translateX(0) scale(1);
+  }
+  35% {
+    transform: translateX(-28px) scale(1.03);
+  }
+  100% {
+    transform: translateX(0) scale(1);
+  }
+}
+
+@keyframes hitReactPlayer {
+  0% {
+    transform: translateX(0);
+    filter: drop-shadow(0 22px 36px rgba(0, 0, 0, 0.46));
+  }
+  40% {
+    transform: translateX(-12px);
+    filter: drop-shadow(0 0 12px red) brightness(1.5);
+  }
+  100% {
+    transform: translateX(0);
+    filter: drop-shadow(0 22px 36px rgba(0, 0, 0, 0.46));
+  }
+}
+
+@keyframes hitReactRival {
+  0% {
+    transform: translateX(0);
+    filter: drop-shadow(0 22px 36px rgba(0, 0, 0, 0.46));
+  }
+  40% {
+    transform: translateX(12px);
+    filter: drop-shadow(0 0 12px red) brightness(1.5);
+  }
+  100% {
+    transform: translateX(0);
+    filter: drop-shadow(0 22px 36px rgba(0, 0, 0, 0.46));
+  }
+}
+
+@keyframes shieldPulse {
+  0% {
+    transform: scale(0.82);
+    opacity: 0;
+  }
+  40% {
+    transform: scale(1.04);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 0.92;
+  }
+}
+
+@keyframes hudHitFlash {
+  0% {
+    box-shadow: 0 0 0 rgba(255, 77, 77, 0);
+  }
+  40% {
+    box-shadow: 0 0 18px rgba(255, 77, 77, 0.36);
+  }
+  100% {
+    box-shadow: 0 0 0 rgba(255, 77, 77, 0);
+  }
+}
+
+@keyframes hudPulse {
+  0% {
+    box-shadow: 0 0 0 rgba(255, 211, 110, 0);
+  }
+  40% {
+    box-shadow: 0 0 22px rgba(255, 211, 110, 0.34);
+  }
+  100% {
+    box-shadow: 0 0 0 rgba(255, 211, 110, 0);
+  }
+}

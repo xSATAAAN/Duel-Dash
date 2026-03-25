@@ -126,6 +126,8 @@ const roomRuntime = {
   serverOffset: 0,
   currentCode: "",
   latestActionId: "",
+  latestActionType: "",
+  latestActorSide: "",
   fx: { player: "", rival: "", until: 0 },
 };
 
@@ -138,6 +140,7 @@ const bootRuntime = {
 
 const uiRuntime = {
   shakeUntil: 0,
+  shakeIntensity: 6,
   floatingTexts: [],
 };
 
@@ -280,23 +283,32 @@ function syncAudioForScreen() {
   }
 }
 
-function triggerScreenShake() {
+function triggerScreenShake(intensity = 6) {
+  uiRuntime.shakeIntensity = intensity;
   uiRuntime.shakeUntil = Date.now() + 320;
 }
 
-function spawnFloatingText(side, value, variant = "damage") {
+function showFloatingText(x, y, text, type = "damage") {
   const item = {
     id: createUuid(),
-    side,
-    value,
-    variant,
+    x,
+    y,
+    text,
+    variant: type,
   };
   uiRuntime.floatingTexts.push(item);
   render();
   setTimeout(() => {
     uiRuntime.floatingTexts = uiRuntime.floatingTexts.filter((entry) => entry.id !== item.id);
     render();
-  }, 850);
+  }, 1000);
+}
+
+function spawnFloatingText(side, value, variant = "damage") {
+  const x = side === "player" ? 28 : 72;
+  const y = variant === "evade" ? 40 : 36;
+  const text = variant === "evade" ? "تفادي" : `-${value}`;
+  showFloatingText(x, y, text, variant);
 }
 
 window.addEventListener(
@@ -613,32 +625,49 @@ function applySimulatedRoomAction(duel, action, playersById, myId) {
 function applyRoomFxFromLatestAction(room) {
   const actions = Object.entries(room?.duel?.actions || {});
   if (actions.length === 0) {
-    return;
+    return false;
   }
 
   const sortedActions = actions.sort((left, right) => left[0].localeCompare(right[0]));
   const latestPair = sortedActions[sortedActions.length - 1];
   if (!latestPair) {
-    return;
+    return false;
   }
   const [latestId, latestAction] = latestPair;
   if (latestId === roomRuntime.latestActionId) {
-    return;
+    return false;
   }
 
   roomRuntime.latestActionId = latestId;
   const isPlayer = latestAction.actorId === getAppClientId();
+  roomRuntime.latestActionType = latestAction.type;
+  roomRuntime.latestActorSide = isPlayer ? "player" : "rival";
   roomRuntime.fx = {
-    player: isPlayer ? (latestAction.type === "dash" ? "evade" : latestAction.type) : latestAction.type === "dash" ? "" : "hit",
-    rival: isPlayer ? (latestAction.type === "dash" ? "" : "hit") : latestAction.type === "dash" ? "evade" : latestAction.type,
+    player: isPlayer
+      ? latestAction.type === "dash"
+        ? "evade"
+        : latestAction.type
+      : latestAction.type === "dash"
+        ? ""
+        : "hit",
+    rival: isPlayer
+      ? latestAction.type === "dash"
+        ? ""
+        : "hit"
+      : latestAction.type === "dash"
+        ? "evade"
+        : latestAction.type,
     until: Date.now() + 260,
   };
 
   const tone = latestAction.type === "special" ? "special" : latestAction.type === "dash" ? "dash" : "hit";
-  if (latestAction.type !== "dash") {
-    triggerScreenShake();
+  if (latestAction.type === "special") {
+    triggerScreenShake(10);
+  } else if (latestAction.type === "attack") {
+    triggerScreenShake(6);
   }
   playSfx(tone);
+  return true;
 }
 
 function buildRoomDuel(room) {
@@ -750,6 +779,8 @@ function detachRoomSubscription() {
   roomRuntime.room = null;
   roomRuntime.currentCode = "";
   roomRuntime.latestActionId = "";
+  roomRuntime.latestActionType = "";
+  roomRuntime.latestActorSide = "";
   roomRuntime.fx = { player: "", rival: "", until: 0 };
 }
 
@@ -781,21 +812,38 @@ async function attachRoomSubscription(code) {
 
     setRoomInvite(room.code || code);
     await repairRoomHost(room);
-    applyRoomFxFromLatestAction(room);
+    const actionWasNew = applyRoomFxFromLatestAction(room);
 
     const roomDuel = buildRoomDuel(room);
     if (roomDuel) {
       state.duel = roomDuel;
-      if (previousDuel) {
+      if (previousDuel && actionWasNew) {
         const playerDelta = Math.max(0, previousDuel.player.hp - roomDuel.player.hp);
         const rivalDelta = Math.max(0, previousDuel.rival.hp - roomDuel.rival.hp);
-        if (playerDelta > 0) {
-          spawnFloatingText("player", playerDelta, "damage");
-          triggerScreenShake();
+        const actorKey = roomRuntime.latestActorSide || "player";
+        const defenderKey = actorKey === "player" ? "rival" : "player";
+        const nextFx = {
+          player: "",
+          rival: "",
+          until: Date.now() + 260,
+        };
+
+        if (roomRuntime.latestActionType === "dash") {
+          nextFx[actorKey] = "evade";
+          triggerCombatMotion(actorKey, defenderKey, "dash");
+        } else if (playerDelta > 0 || rivalDelta > 0) {
+          const damage = actorKey === "player" ? rivalDelta : playerDelta;
+          nextFx[actorKey] = roomRuntime.latestActionType || "attack";
+          nextFx[defenderKey] = "hit";
+          triggerCombatMotion(actorKey, defenderKey, roomRuntime.latestActionType || "attack", false, damage);
+          triggerScreenShake((roomRuntime.latestActionType || "attack") === "special" ? 10 : 6);
+        } else if (roomRuntime.latestActionType) {
+          nextFx[actorKey] = roomRuntime.latestActionType;
+          nextFx[defenderKey] = "evade";
+          triggerCombatMotion(actorKey, defenderKey, roomRuntime.latestActionType, true);
         }
-        if (rivalDelta > 0) {
-          spawnFloatingText("rival", rivalDelta, "damage");
-        }
+
+        roomRuntime.fx = nextFx;
       }
       applyRoomMatchRewards(roomDuel);
       if (roomDuel.status === "live") {
@@ -878,7 +926,7 @@ function duelTimeLeft() {
   if (!state.duel) {
     return 0;
   }
-  return Math.max(0, Math.ceil((state.duel.endsAt - Date.now()) / 1000));
+  return Math.max(0, Math.ceil((state.duel.endsAt - now()) / 1000));
 }
 
 function damageRoll(type, bladeId) {
@@ -931,6 +979,29 @@ function markFlash(side, flash) {
     state.duel[side].flash = "";
     render();
   }, 260);
+}
+
+function triggerCombatMotion(attackerKey, defenderKey, action, evaded = false, damage = 0) {
+  if (!state.duel) {
+    return;
+  }
+
+  if (action === "dash") {
+    markFlash(attackerKey, "evade");
+    showFloatingText(attackerKey === "player" ? 28 : 72, 42, "دفاع", "evade");
+    return;
+  }
+
+  markFlash(attackerKey, action);
+
+  if (evaded) {
+    markFlash(defenderKey, "evade");
+    showFloatingText(defenderKey === "player" ? 28 : 72, 40, "تفادي", "evade");
+    return;
+  }
+
+  markFlash(defenderKey, "hit");
+  showFloatingText(defenderKey === "player" ? 28 : 72, 36, `-${damage}`, "damage");
 }
 
 function finishDuel() {
@@ -990,9 +1061,8 @@ function resolveAction(attackerKey, defenderKey, action) {
   if (action === "dash") {
     attacker.evadeUntil = timestamp + (actorBladeId === "riptide" ? 1150 : 850);
     attacker.charge = Math.min(100, attacker.charge + chargeGain(action, actorBladeId));
-    markFlash(attackerKey, "evade");
     pushLog(`${attacker.name} اندفع بسرعة وجهز هجمة مرتدة.`, "dash");
-    spawnFloatingText(attackerKey, "تفادي", "evade");
+    triggerCombatMotion(attackerKey, defenderKey, action);
     playSfx("dash");
     render();
     return;
@@ -1001,9 +1071,8 @@ function resolveAction(attackerKey, defenderKey, action) {
   const evaded = defender.evadeUntil > timestamp;
   if (evaded) {
     defender.evadeUntil = 0;
-    markFlash(defenderKey, "evade");
     pushLog(`${defender.name} تفادى هجمة ${attacker.name}.`, "evade");
-    spawnFloatingText(defenderKey, "تفادي", "evade");
+    triggerCombatMotion(attackerKey, defenderKey, action, true);
     playTone("miss");
   } else {
     const damage = damageRoll(action, actorBladeId);
@@ -1012,10 +1081,8 @@ function resolveAction(attackerKey, defenderKey, action) {
       action === "special"
         ? attacker.charge
         : Math.min(100, attacker.charge + chargeGain(action, actorBladeId));
-    markFlash(attackerKey, action);
-    markFlash(defenderKey, "hit");
-    spawnFloatingText(defenderKey, damage, "damage");
-    triggerScreenShake();
+    triggerCombatMotion(attackerKey, defenderKey, action, false, damage);
+    triggerScreenShake(action === "special" ? 10 : 6);
     pushLog(
       `${attacker.name} وجه ${action === "special" ? "الضربة الخاصة" : "ضربة مباشرة"} بقيمة ${damage}.`,
       action === "special" ? "special" : "hit",
@@ -1462,10 +1529,9 @@ function bladeImageFor(fighter, fallbackBlade = "ignite") {
 function renderFloatingTexts() {
   return uiRuntime.floatingTexts
     .map((item) => {
-      const content = item.variant === "evade" ? "تفادي" : `-${item.value}`;
       return `
-        <span class="floating-text ${item.side} ${item.variant}">
-          ${content}
+        <span class="floating-text ${item.variant}" style="left:${item.x}%; top:${item.y}%;">
+          ${item.text}
         </span>
       `;
     })
@@ -1478,7 +1544,7 @@ function localizedTone(tone) {
     info: "معلومة",
     hit: "ضربة",
     special: "خاص",
-    dash: "اندفاعة",
+    dash: "دفاع",
     evade: "تفادٍ",
     win: "فوز",
     loss: "خسارة",
@@ -2297,7 +2363,7 @@ function renderDuelGame() {
 
   return `
     <section class="game-screen duel-screen reveal">
-      <article class="battle-shell ${uiRuntime.shakeUntil > Date.now() ? "is-shaking" : ""}">
+      <article class="battle-shell ${uiRuntime.shakeUntil > Date.now() ? "is-shaking" : ""}" style="--shake-intensity:${uiRuntime.shakeIntensity}px;">
         <div class="battle-backdrop">
           <span class="battle-layer layer-far"></span>
           <span class="battle-layer layer-mid"></span>
@@ -2343,6 +2409,7 @@ function renderDuelGame() {
           <div class="arena-floor"></div>
 
           <div class="arena-fighter arena-player ${duel.player.flash}">
+            <span class="shield-effect"></span>
             <div class="combatant idle">
               ${renderCombatantSvg(duel.player, "player")}
             </div>
@@ -2353,6 +2420,7 @@ function renderDuelGame() {
           </div>
 
           <div class="arena-fighter arena-rival ${duel.rival.flash}">
+            <span class="shield-effect"></span>
             <div class="combatant idle rival">
               ${renderCombatantSvg(duel.rival, "rival")}
             </div>
