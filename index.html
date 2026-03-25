@@ -6,94 +6,116 @@
       name="viewport"
       content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"
     />
-    <meta name="theme-color" content="#0c0d12" />
+    <meta name="theme-color" content="#0f172a" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="Duel Dash" />
     <meta name="format-detection" content="telephone=no" />
-    <meta
-      name="description"
-      content="لعبة مبارزة 1v1 تعمل كـ PWA على iPhone بإحساس قريب من التطبيق المثبت."
-    />
+    <meta name="description" content="لعبة مبارزة 1v1 عربية بتجربة PWA كاملة على الموبايل." />
     <link rel="manifest" href="./manifest.webmanifest" />
     <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png" />
     <link rel="icon" type="image/png" href="./icons/icon-192.png" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Changa:wght@400;500;700;800&family=Lalezar&display=swap"
-      rel="stylesheet"
-    />
+    <link href="https://fonts.googleapis.com/css2?family=Changa:wght@400;500;700;800&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="./styles.css" />
     <title>Duel Dash</title>
   </head>
   <body>
-    <div id="app"></div>
-    <div id="orientation-overlay" class="orientation-overlay" aria-hidden="true">
-      <div class="orientation-card">
-        <div class="orientation-icon" aria-hidden="true">
-          <svg viewBox="0 0 140 140">
-            <defs>
-              <linearGradient id="rotate-phone" x1="0" y1="0" x2="1" y2="1">
-                <stop offset="0%" stop-color="#ff7c52" />
-                <stop offset="100%" stop-color="#59d3ff" />
-              </linearGradient>
-            </defs>
-            <circle cx="70" cy="70" r="58" fill="rgba(255,255,255,0.05)" stroke="rgba(255,255,255,0.12)" stroke-width="2" />
-            <rect x="53" y="22" width="34" height="62" rx="9" fill="url(#rotate-phone)" />
-            <rect x="59" y="28" width="22" height="45" rx="5" fill="#08101b" />
-            <path d="M94 91c9-2 17-7 22-15" fill="none" stroke="rgba(255,255,255,0.82)" stroke-width="6" stroke-linecap="round" />
-            <path d="M116 76l2 14-13-4" fill="none" stroke="rgba(255,255,255,0.82)" stroke-width="6" stroke-linecap="round" stroke-linejoin="round" />
-          </svg>
-        </div>
-        <strong>يرجى تدوير الهاتف لاستكمال المعركة</strong>
-        <span>اللعبة تعمل بوضع العرض فقط حتى تظهر الساحة وأزرار القتال بالشكل الصحيح.</span>
+    <div id="portrait-overlay" aria-hidden="true">
+      <div class="portrait-overlay__icon" aria-hidden="true">
+        <svg viewBox="0 0 180 180">
+          <defs>
+            <linearGradient id="phone-glow" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stop-color="#38bdf8" />
+              <stop offset="100%" stop-color="#22d3ee" />
+            </linearGradient>
+          </defs>
+          <circle cx="90" cy="90" r="72" fill="rgba(255,255,255,0.04)" stroke="rgba(255,255,255,0.12)" stroke-width="2" />
+          <g class="phone-rotate">
+            <rect x="68" y="34" width="44" height="82" rx="12" fill="url(#phone-glow)" />
+            <rect x="74" y="42" width="32" height="62" rx="8" fill="#0f172a" />
+            <circle cx="90" cy="110" r="3.5" fill="#e2e8f0" />
+          </g>
+          <path d="M123 123c18-4 31-15 39-30" fill="none" stroke="#f8fafc" stroke-width="7" stroke-linecap="round" />
+          <path d="M158 91l5 18-17-7" fill="none" stroke="#f8fafc" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" />
+        </svg>
+      </div>
+      <strong>يرجى تدوير الهاتف بالعرض للعب</strong>
+      <span>اللعبة مصممة بالكامل بوضع Landscape حتى تظهر الواجهة والـ Canvas بالشكل الصحيح.</span>
+    </div>
+
+    <div id="app-shell">
+      <div id="game-lobby">
+        <div class="lobby-noise"></div>
+        <div class="lobby-glow lobby-glow--left"></div>
+        <div class="lobby-glow lobby-glow--right"></div>
+
+        <header class="lobby-topbar">
+          <div class="player-badge">
+            <div class="player-badge__avatar">
+              <span id="player-avatar-sigil">DD</span>
+            </div>
+            <div class="player-badge__copy">
+              <span class="player-badge__label">الملف القتالي</span>
+              <strong id="player-name">لاعب</strong>
+              <span id="player-level">المستوى 1</span>
+            </div>
+          </div>
+
+          <div class="currency-strip">
+            <div class="currency-pill currency-pill--coins">
+              <span class="currency-pill__icon"></span>
+              <div>
+                <span>Coins</span>
+                <strong id="player-coins">0</strong>
+              </div>
+            </div>
+
+            <div class="currency-pill currency-pill--gems">
+              <span class="currency-pill__icon"></span>
+              <div>
+                <span>Gems</span>
+                <strong id="player-gems">0</strong>
+              </div>
+            </div>
+          </div>
+        </header>
+
+        <main class="lobby-main">
+          <section class="hero-panel">
+            <span class="hero-panel__eyebrow">DUEL DASH</span>
+            <h1>لوبي قتالي عربي بإحساس لعبة موبايل حقيقية</h1>
+            <p>
+              تم فصل اللوبي بالكامل عن ساحة القتال. الواجهة هنا DOM ثابتة وسريعة، وساحة اللعب التالية
+              جاهزة للانتقال إلى Canvas في المرحلة القادمة.
+            </p>
+
+            <div class="hero-panel__cards">
+              <article class="hero-card">
+                <span>الحالة</span>
+                <strong>جاهز للـ Matchmaking</strong>
+              </article>
+              <article class="hero-card">
+                <span>المخطط التالي</span>
+                <strong>Canvas + Joysticks</strong>
+              </article>
+            </div>
+          </section>
+
+          <button id="find-match-button" type="button">
+            <span>ابحث عن خصم</span>
+          </button>
+        </main>
+      </div>
+
+      <div id="arena-container" style="display: none; width: 100vw; height: 100vh; position: relative;">
+        <canvas id="game-canvas"></canvas>
+        <button id="back-to-lobby" type="button">العودة للوبي</button>
       </div>
     </div>
-    <script>
-      window.__duelDashBooted = false;
-      window.__showBootError = function (message) {
-        const app = document.getElementById("app");
-        if (!app || window.__duelDashBooted) {
-          return;
-        }
 
-        app.innerHTML = `
-          <main style="min-height:100vh;display:grid;place-items:center;padding:24px;font-family:'Changa',sans-serif;color:#f6f2ea;direction:rtl;">
-            <section style="width:min(100%,420px);background:rgba(15,18,27,.94);border:1px solid rgba(255,255,255,.08);border-radius:28px;padding:20px;box-shadow:0 18px 55px rgba(0,0,0,.36);">
-              <h1 style="margin:0 0 12px;font-size:28px;">تعذر تحميل Duel Dash</h1>
-              <p style="margin:0 0 12px;color:#b6bbcd;line-height:1.6;">تم تحميل التنسيق، لكن كود اللعبة توقف قبل أن يرسم الواجهة.</p>
-              <pre style="white-space:pre-wrap;word-break:break-word;background:rgba(255,255,255,.04);border-radius:18px;padding:12px;color:#ffcf72;">${String(message)}</pre>
-              <p style="margin:12px 0 0;color:#9fa3b7;">جرّب التحديث مرة واحدة. إذا استمرت الرسالة، أرسل لقطة شاشة.</p>
-            </section>
-          </main>
-        `;
-      };
-      window.addEventListener("error", function (event) {
-        window.__showBootError(event.message || "Unknown script error");
-      });
-      window.addEventListener("unhandledrejection", function (event) {
-        const reason = event.reason && (event.reason.stack || event.reason.message || String(event.reason));
-        window.__showBootError(reason || "Unhandled promise rejection");
-      });
-      setTimeout(function () {
-        if (!window.__duelDashBooted) {
-          window.__showBootError("انتهت مهلة الإقلاع. غالبًا لم يتم تحميل JavaScript module بشكل صحيح.");
-        }
-      }, 3500);
-    </script>
-    <script type="module">
-      import("./app.js")
-        .then(() => {
-          window.__duelDashBooted = true;
-        })
-        .catch((error) => {
-          window.__showBootError(error && (error.stack || error.message || String(error)));
-        });
-    </script>
-    <script nomodule>
-      window.__showBootError("هذا الإصدار من Safari قديم ولا يدعم JavaScript modules.");
-    </script>
+    <script type="module" src="./app.js"></script>
   </body>
 </html>
