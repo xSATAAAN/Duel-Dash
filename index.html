@@ -28,6 +28,49 @@
   </head>
   <body>
     <div id="app"></div>
-    <script type="module" src="./app.js"></script>
+    <script>
+      window.__duelDashBooted = false;
+      window.__showBootError = function (message) {
+        const app = document.getElementById("app");
+        if (!app || window.__duelDashBooted) {
+          return;
+        }
+
+        app.innerHTML = `
+          <main style="min-height:100vh;display:grid;place-items:center;padding:24px;font-family:'Space Grotesk',sans-serif;color:#f6f2ea;">
+            <section style="width:min(100%,420px);background:rgba(15,18,27,.94);border:1px solid rgba(255,255,255,.08);border-radius:28px;padding:20px;box-shadow:0 18px 55px rgba(0,0,0,.36);">
+              <h1 style="margin:0 0 12px;font-size:28px;">Duel Dash failed to load</h1>
+              <p style="margin:0 0 12px;color:#b6bbcd;line-height:1.6;">Safari loaded the page styling, but the app script stopped before rendering.</p>
+              <pre style="white-space:pre-wrap;word-break:break-word;background:rgba(255,255,255,.04);border-radius:18px;padding:12px;color:#ffcf72;">${String(message)}</pre>
+              <p style="margin:12px 0 0;color:#9fa3b7;">Try refreshing once. If the same message stays, send me a screenshot of it.</p>
+            </section>
+          </main>
+        `;
+      };
+      window.addEventListener("error", function (event) {
+        window.__showBootError(event.message || "Unknown script error");
+      });
+      window.addEventListener("unhandledrejection", function (event) {
+        const reason = event.reason && (event.reason.stack || event.reason.message || String(event.reason));
+        window.__showBootError(reason || "Unhandled promise rejection");
+      });
+      setTimeout(function () {
+        if (!window.__duelDashBooted) {
+          window.__showBootError("Boot timeout. A JavaScript module likely failed to load.");
+        }
+      }, 3500);
+    </script>
+    <script type="module">
+      import("./app.js")
+        .then(() => {
+          window.__duelDashBooted = true;
+        })
+        .catch((error) => {
+          window.__showBootError(error && (error.stack || error.message || String(error)));
+        });
+    </script>
+    <script nomodule>
+      window.__showBootError("This iPhone Safari version is too old for JavaScript modules.");
+    </script>
   </body>
 </html>

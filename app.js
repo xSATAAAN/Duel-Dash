@@ -80,6 +80,18 @@ const defaultState = {
   toast: "",
 };
 
+function cloneValue(value) {
+  return JSON.parse(JSON.stringify(value));
+}
+
+function createUuid() {
+  if (globalThis.crypto && typeof globalThis.crypto.randomUUID === "function") {
+    return globalThis.crypto.randomUUID();
+  }
+
+  return `dd-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
 let state = hydrateState();
 let settings = hydrateSettings();
 let audioCtx;
@@ -103,11 +115,11 @@ function hydrateState() {
   try {
     const raw = JSON.parse(localStorage.getItem(STORAGE_KEY) || "null");
     if (!raw) {
-      return structuredClone(defaultState);
+      return cloneValue(defaultState);
     }
     const fallbackScreen = raw.profile ? "home" : "onboarding";
     return {
-      ...structuredClone(defaultState),
+      ...cloneValue(defaultState),
       ...raw,
       screen: raw.screen === "duel" ? "home" : raw.screen || fallbackScreen,
       duel: null,
@@ -115,7 +127,7 @@ function hydrateState() {
       toast: "",
     };
   } catch {
-    return structuredClone(defaultState);
+    return cloneValue(defaultState);
   }
 }
 
@@ -308,7 +320,7 @@ function buildRemoteFighter(player) {
 
 function pushRoomLog(duel, text, tone = "info") {
   duel.log.unshift({
-    id: crypto.randomUUID(),
+    id: createUuid(),
     text,
     tone,
   });
@@ -392,7 +404,12 @@ function applyRoomFxFromLatestAction(room) {
     return;
   }
 
-  const [latestId, latestAction] = actions.sort((left, right) => left[0].localeCompare(right[0])).at(-1);
+  const sortedActions = actions.sort((left, right) => left[0].localeCompare(right[0]));
+  const latestPair = sortedActions[sortedActions.length - 1];
+  if (!latestPair) {
+    return;
+  }
+  const [latestId, latestAction] = latestPair;
   if (latestId === roomRuntime.latestActionId) {
     return;
   }
@@ -433,7 +450,7 @@ function buildRoomDuel(room) {
     rival: buildRemoteFighter(rival),
     log: [
       {
-        id: crypto.randomUUID(),
+        id: createUuid(),
         tone: "start",
         text: `${me.name} and ${rival.name} entered room ${room.code}.`,
       },
@@ -610,7 +627,7 @@ function createDuel(mode = "practice", rivalName = "Rogue Flux") {
     },
     log: [
       {
-        id: crypto.randomUUID(),
+        id: createUuid(),
         tone: "start",
         text: `${state.profile.name} enters the arena. ${rivalName} is ready.`,
       },
@@ -662,7 +679,7 @@ function canUseAction(fighter, action) {
 
 function pushLog(text, tone = "info") {
   state.duel.log.unshift({
-    id: crypto.randomUUID(),
+    id: createUuid(),
     text,
     tone,
   });
@@ -983,7 +1000,7 @@ function restoreHashRoom() {
 function resetProgress() {
   clearDuelTimers();
   localStorage.removeItem(STORAGE_KEY);
-  state = structuredClone(defaultState);
+  state = cloneValue(defaultState);
   detachRoomSubscription();
   render();
 }
@@ -992,7 +1009,11 @@ function playTone(type) {
   if (!settings.sound) {
     return;
   }
-  const context = audioCtx || new AudioContext();
+  const AudioContextCtor = globalThis.AudioContext || globalThis.webkitAudioContext;
+  if (!AudioContextCtor) {
+    return;
+  }
+  const context = audioCtx || new AudioContextCtor();
   audioCtx = context;
   const oscillator = context.createOscillator();
   const gain = context.createGain();
