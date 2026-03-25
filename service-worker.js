@@ -1,9 +1,10 @@
-const CACHE_NAME = "duel-dash-cache-v1";
+const CACHE_NAME = "duel-dash-cache-v3";
 const ASSETS = [
   "./",
   "./index.html",
   "./styles.css",
   "./app.js",
+  "./game-assets.js",
   "./firebase-client.js",
   "./manifest.webmanifest",
   "./icons/icon-192.png",

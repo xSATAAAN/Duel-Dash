@@ -1,18 +1,20 @@
 <!doctype html>
-<html lang="en">
+<html lang="ar" dir="rtl">
   <head>
     <meta charset="UTF-8" />
     <meta
       name="viewport"
-      content="width=device-width, initial-scale=1, viewport-fit=cover"
+      content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"
     />
     <meta name="theme-color" content="#0c0d12" />
+    <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="Duel Dash" />
+    <meta name="format-detection" content="telephone=no" />
     <meta
       name="description"
-      content="A fast 1v1 PvP-inspired duel game designed to feel native on iPhone."
+      content="لعبة مبارزة 1v1 تعمل كـ PWA على iPhone بإحساس قريب من التطبيق المثبت."
     />
     <link rel="manifest" href="./manifest.webmanifest" />
     <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png" />
@@ -20,7 +22,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Space+Grotesk:wght@400;500;700&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Changa:wght@400;500;700;800&family=Orbitron:wght@600;700;800&display=swap"
       rel="stylesheet"
     />
     <link rel="stylesheet" href="./styles.css" />
@@ -37,12 +39,12 @@
         }
 
         app.innerHTML = `
-          <main style="min-height:100vh;display:grid;place-items:center;padding:24px;font-family:'Space Grotesk',sans-serif;color:#f6f2ea;">
+          <main style="min-height:100vh;display:grid;place-items:center;padding:24px;font-family:'Changa',sans-serif;color:#f6f2ea;direction:rtl;">
             <section style="width:min(100%,420px);background:rgba(15,18,27,.94);border:1px solid rgba(255,255,255,.08);border-radius:28px;padding:20px;box-shadow:0 18px 55px rgba(0,0,0,.36);">
-              <h1 style="margin:0 0 12px;font-size:28px;">Duel Dash failed to load</h1>
-              <p style="margin:0 0 12px;color:#b6bbcd;line-height:1.6;">Safari loaded the page styling, but the app script stopped before rendering.</p>
+              <h1 style="margin:0 0 12px;font-size:28px;">تعذر تحميل Duel Dash</h1>
+              <p style="margin:0 0 12px;color:#b6bbcd;line-height:1.6;">تم تحميل التنسيق، لكن كود اللعبة توقف قبل أن يرسم الواجهة.</p>
               <pre style="white-space:pre-wrap;word-break:break-word;background:rgba(255,255,255,.04);border-radius:18px;padding:12px;color:#ffcf72;">${String(message)}</pre>
-              <p style="margin:12px 0 0;color:#9fa3b7;">Try refreshing once. If the same message stays, send me a screenshot of it.</p>
+              <p style="margin:12px 0 0;color:#9fa3b7;">جرّب التحديث مرة واحدة. إذا استمرت الرسالة، أرسل لقطة شاشة.</p>
             </section>
           </main>
         `;
@@ -56,7 +58,7 @@
       });
       setTimeout(function () {
         if (!window.__duelDashBooted) {
-          window.__showBootError("Boot timeout. A JavaScript module likely failed to load.");
+          window.__showBootError("انتهت مهلة الإقلاع. غالبًا لم يتم تحميل JavaScript module بشكل صحيح.");
         }
       }, 3500);
     </script>
@@ -70,7 +72,7 @@
         });
     </script>
     <script nomodule>
-      window.__showBootError("This iPhone Safari version is too old for JavaScript modules.");
+      window.__showBootError("هذا الإصدار من Safari قديم ولا يدعم JavaScript modules.");
     </script>
   </body>
 </html>

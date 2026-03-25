@@ -1,7 +1,9 @@
 {
   "name": "Duel Dash",
   "short_name": "Duel Dash",
-  "description": "A native-feel 1v1 duel web app with local progression, room flow, and PWA polish.",
+  "lang": "ar",
+  "dir": "rtl",
+  "description": "لعبة مبارزة 1v1 تعمل كـ PWA على iPhone مع غرف مباشرة وتقدم محفوظ محليًا.",
   "start_url": "./",
   "display": "standalone",
   "background_color": "#0c0d12",

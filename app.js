@@ -1,3 +1,12 @@
+import {
+  ASSET_URLS,
+  collectPreloadUrls,
+  getAbilityImage,
+  getBladeImage,
+  getFighterImage,
+  getSkinImage,
+} from "./game-assets.js";
+
 const STORAGE_KEY = "duel-dash-state-v2";
 const SETTINGS_KEY = "duel-dash-settings-v1";
 const CLIENT_ID_KEY = "duel-dash-client-id-v1";
@@ -120,7 +129,157 @@ const roomRuntime = {
   fx: { player: "", rival: "", until: 0 },
 };
 
+const bootRuntime = {
+  ready: false,
+  progress: 0,
+  started: false,
+};
+
+const uiRuntime = {
+  shakeUntil: 0,
+  floatingTexts: [],
+};
+
+const audioRuntime = {
+  unlocked: false,
+  lobbyTrack: null,
+};
+
 const app = document.getElementById("app");
+
+function preloadImage(url) {
+  return new Promise((resolve) => {
+    const image = new Image();
+    image.onload = () => resolve(url);
+    image.onerror = () => resolve(url);
+    image.src = url;
+  });
+}
+
+async function bootAssets() {
+  if (bootRuntime.started) {
+    return;
+  }
+
+  bootRuntime.started = true;
+  render();
+
+  const urls = collectPreloadUrls();
+  const total = Math.max(urls.length, 1);
+  const startedAt = Date.now();
+  let loaded = 0;
+
+  await Promise.all(
+    urls.map((url) =>
+      preloadImage(url).then(() => {
+        loaded += 1;
+        bootRuntime.progress = Math.round((loaded / total) * 100);
+        render();
+      }),
+    ),
+  );
+
+  const elapsed = Date.now() - startedAt;
+  if (elapsed < 1400) {
+    await new Promise((resolve) => setTimeout(resolve, 1400 - elapsed));
+  }
+
+  bootRuntime.progress = 100;
+  bootRuntime.ready = true;
+  render();
+}
+
+function unlockAudio() {
+  if (audioRuntime.unlocked) {
+    return;
+  }
+  audioRuntime.unlocked = true;
+}
+
+function playSfx(kind) {
+  if (!settings.sound) {
+    return;
+  }
+  const source = ASSET_URLS.audio[kind];
+  if (audioRuntime.unlocked && source) {
+    const audio = new Audio(source);
+    audio.volume = kind === "lobbyBgm" ? 0.32 : 0.74;
+    audio.play().catch(() => {});
+    return;
+  }
+
+  const toneMap = {
+    hit: "hit",
+    dash: "dash",
+    special: "special",
+    win: "win",
+    loss: "loss",
+  };
+  if (toneMap[kind]) {
+    playTone(toneMap[kind]);
+  }
+}
+
+function startLobbyMusic() {
+  if (!audioRuntime.unlocked || !ASSET_URLS.audio.lobbyBgm) {
+    return;
+  }
+
+  if (!audioRuntime.lobbyTrack) {
+    audioRuntime.lobbyTrack = new Audio(ASSET_URLS.audio.lobbyBgm);
+    audioRuntime.lobbyTrack.loop = true;
+    audioRuntime.lobbyTrack.volume = 0.26;
+  }
+
+  audioRuntime.lobbyTrack.play().catch(() => {});
+}
+
+function stopLobbyMusic() {
+  if (!audioRuntime.lobbyTrack) {
+    return;
+  }
+  audioRuntime.lobbyTrack.pause();
+  audioRuntime.lobbyTrack.currentTime = 0;
+}
+
+function syncAudioForScreen() {
+  if (!bootRuntime.ready) {
+    return;
+  }
+  if (state.screen === "duel") {
+    stopLobbyMusic();
+  } else {
+    startLobbyMusic();
+  }
+}
+
+function triggerScreenShake() {
+  uiRuntime.shakeUntil = Date.now() + 320;
+}
+
+function spawnFloatingText(side, value, variant = "damage") {
+  const item = {
+    id: createUuid(),
+    side,
+    value,
+    variant,
+  };
+  uiRuntime.floatingTexts.push(item);
+  render();
+  setTimeout(() => {
+    uiRuntime.floatingTexts = uiRuntime.floatingTexts.filter((entry) => entry.id !== item.id);
+    render();
+  }, 850);
+}
+
+window.addEventListener(
+  "pointerdown",
+  () => {
+    unlockAudio();
+    syncAudioForScreen();
+  },
+  { once: true },
+);
 
 function hydrateState() {
   try {
@@ -210,11 +369,11 @@ function dailyMissionSeed() {
 function dailyMissions() {
   const seed = dailyMissionSeed();
   const pool = [
-    { title: "Win 2 duels", reward: "+45 coins" },
-    { title: "Land 4 specials", reward: "+60 XP" },
-    { title: "Finish under 30 sec", reward: "+1 skin shard" },
-    { title: "Dash through 6 attacks", reward: "+35 coins" },
-    { title: "Play 3 matches", reward: "+50 XP" },
+    { title: "اكسب مباراتين", reward: "+45 كوين" },
+    { title: "نفّذ 4 ضربات خاصة", reward: "+60 XP" },
+    { title: "أنهِ مواجهة خلال 30 ثانية", reward: "+1 شظية سكن" },
+    { title: "تفادَ 6 هجمات بالاندفاعة", reward: "+35 كوين" },
+    { title: "العب 3 مباريات", reward: "+50 XP" },
   ];
   return [pool[seed % pool.length], pool[(seed + 2) % pool.length]];
 }
@@ -237,7 +396,7 @@ function showToast(message) {
 function createProfile({ name, avatarId, bladeId }) {
   const starterSkin = skins[0];
   state.profile = {
-    name: name.trim() || "Pilot",
+    name: name.trim() || "لاعب",
     avatarId,
     bladeId,
     skinId: starterSkin.id,
@@ -251,7 +410,7 @@ function createProfile({ name, avatarId, bladeId }) {
   };
   state.screen = "home";
   saveState();
-  showToast("Profile created. Duel time.");
+  showToast("تم إنشاء الحساب. الساحة جاهزة.");
 }
 
 function addProgress(result) {
@@ -319,6 +478,9 @@ function buildRemoteFighter(player) {
   return {
     id: player.id,
     name: player.name,
+    avatarId: player.avatarId || avatar.id,
+    bladeId: player.bladeId || "ignite",
+    skinId: player.skinId || skin.id,
     sigil: avatar.sigil,
     gradient: skin.gradient,
     hp: 100,
@@ -384,14 +546,14 @@ function applySimulatedRoomAction(duel, action, playersById, myId) {
   if (action.type === "dash") {
     attacker.evadeUntil = timestamp + (actorBladeId === "riptide" ? 1150 : 850);
     attacker.charge = Math.min(100, attacker.charge + chargeGain("dash", actorBladeId));
-    pushRoomLog(duel, `${attacker.name} dashed to bait the next strike.`, "dash");
+    pushRoomLog(duel, `${attacker.name} اندفع ليجهز الهجمة التالية.`, "dash");
     return;
   }
 
   const evaded = defender.evadeUntil > timestamp;
   if (evaded) {
     defender.evadeUntil = 0;
-    pushRoomLog(duel, `${defender.name} evaded ${attacker.name}'s ${action.type}.`, "evade");
+    pushRoomLog(duel, `${defender.name} تفادى هجمة ${attacker.name}.`, "evade");
     return;
   }
 
@@ -400,7 +562,7 @@ function applySimulatedRoomAction(duel, action, playersById, myId) {
   attacker.charge = Math.min(100, attacker.charge + chargeGain(action.type, actorBladeId));
   pushRoomLog(
     duel,
-    `${attacker.name} hit for ${damage} with ${action.type === "special" ? "Burst Core" : "Quick Strike"}.`,
+    `${attacker.name} أصاب الخصم بـ ${damage} عبر ${action.type === "special" ? "الضربة الخاصة" : "ضربة سريعة"}.`,
     action.type === "special" ? "special" : "hit",
   );
 
@@ -434,7 +596,10 @@ function applyRoomFxFromLatestAction(room) {
   };
 
   const tone = latestAction.type === "special" ? "special" : latestAction.type === "dash" ? "dash" : "hit";
-  playTone(tone);
+  if (latestAction.type !== "dash") {
+    triggerScreenShake();
+  }
+  playSfx(tone);
 }
 
 function buildRoomDuel(room) {
@@ -463,7 +628,7 @@ function buildRoomDuel(room) {
       {
         id: createUuid(),
         tone: "start",
-        text: `${me.name} and ${rival.name} entered room ${room.code}.`,
+        text: `${me.name} و${rival.name} دخلا غرفة ${room.code}.`,
       },
     ],
     winner: null,
@@ -509,7 +674,7 @@ function applyRoomMatchRewards(duel) {
   state.rewardedMatchIds.push(duel.matchId);
   trimRewardedMatches();
   saveState();
-  showToast(duel.winner === "player" ? "Room duel won. Rewards added." : "Room duel lost. Rewards added.");
+  showToast(duel.winner === "player" ? "فزت بمواجهة الغرفة وتمت إضافة المكافآت." : "خسرت مواجهة الغرفة وتمت إضافة المكافآت.");
 }
 
 async function repairRoomHost(room) {
@@ -564,6 +729,7 @@ async function attachRoomSubscription(code) {
   roomRuntime.currentCode = code;
   const api = await loadFirebaseApi();
   roomRuntime.roomUnsubscribe = api.subscribeRoom(code, async (room) => {
+    const previousDuel = state.duel?.mode === "room" ? cloneValue(state.duel) : null;
     roomRuntime.room = room;
 
     if (!room) {
@@ -581,6 +747,17 @@ async function attachRoomSubscription(code) {
     const roomDuel = buildRoomDuel(room);
     if (roomDuel) {
       state.duel = roomDuel;
+      if (previousDuel) {
+        const playerDelta = Math.max(0, previousDuel.player.hp - roomDuel.player.hp);
+        const rivalDelta = Math.max(0, previousDuel.rival.hp - roomDuel.rival.hp);
+        if (playerDelta > 0) {
+          spawnFloatingText("player", playerDelta, "damage");
+          triggerScreenShake();
+        }
+        if (rivalDelta > 0) {
+          spawnFloatingText("rival", rivalDelta, "damage");
+        }
+      }
       applyRoomMatchRewards(roomDuel);
       if (roomDuel.status === "live") {
         state.screen = "duel";
@@ -605,11 +782,11 @@ async function syncCurrentRoomProfile() {
     const api = await loadFirebaseApi();
     await api.syncPlayerProfile(state.roomCodeActive, state.profile);
   } catch {
-    showToast("Room profile sync failed.");
+    showToast("فشل تحديث بيانات اللاعب داخل الغرفة.");
   }
 }
 
-function createDuel(mode = "practice", rivalName = "Rogue Flux") {
+function createDuel(mode = "practice", rivalName = "روغ فلوكس") {
   const avatar = currentAvatar();
   const skin = currentSkin();
   const rivalSkin = skins[(Math.floor(Math.random() * (skins.length - 1)) + 1) % skins.length];
@@ -621,6 +798,9 @@ function createDuel(mode = "practice", rivalName = "Rogue Flux") {
     endsAt: Date.now() + 90_000,
     player: {
       name: state.profile.name,
+      avatarId: state.profile.avatarId,
+      bladeId: state.profile.bladeId,
+      skinId: state.profile.skinId,
       sigil: avatar.sigil,
       gradient: skin.gradient,
       hp: 100,
@@ -631,6 +811,9 @@ function createDuel(mode = "practice", rivalName = "Rogue Flux") {
     },
     rival: {
       name: rivalName,
+      avatarId: "rival",
+      bladeId: "ignite",
+      skinId: rivalSkin.id,
       sigil: "RX",
       gradient: rivalSkin.gradient,
       hp: 100,
@@ -643,7 +826,7 @@ function createDuel(mode = "practice", rivalName = "Rogue Flux") {
       {
         id: createUuid(),
         tone: "start",
-        text: `${state.profile.name} enters the arena. ${rivalName} is ready.`,
+        text: `${state.profile.name} دخل الساحة. ${rivalName} جاهز للمواجهة.`,
       },
     ],
     winner: null,
@@ -726,13 +909,13 @@ function finishDuel() {
   }
 
   if (duel.winner === "player") {
-    pushLog(`${state.profile.name} wins the clash and claims the arena.`, "win");
+    pushLog(`${state.profile.name} حسم المعركة وسيطر على الساحة.`, "win");
     addProgress("win");
-    playTone("win");
+    playSfx("win");
   } else {
-    pushLog(`${duel.rival.name} steals the match on the final beat.`, "loss");
+    pushLog(`${duel.rival.name} خطف المباراة في اللحظة الأخيرة.`, "loss");
     addProgress("loss");
-    playTone("loss");
+    playSfx("loss");
   }
 
   clearDuelTimers();
@@ -769,8 +952,9 @@ function resolveAction(attackerKey, defenderKey, action) {
     attacker.evadeUntil = timestamp + (actorBladeId === "riptide" ? 1150 : 850);
     attacker.charge = Math.min(100, attacker.charge + chargeGain(action, actorBladeId));
     markFlash(attackerKey, "evade");
-    pushLog(`${attacker.name} dashed through the lane and primed a counter.`, "dash");
-    playTone("dash");
+    pushLog(`${attacker.name} اندفع بسرعة وجهز هجمة مرتدة.`, "dash");
+    spawnFloatingText(attackerKey, "تفادي", "evade");
+    playSfx("dash");
     render();
     return;
   }
@@ -779,7 +963,8 @@ function resolveAction(attackerKey, defenderKey, action) {
   if (evaded) {
     defender.evadeUntil = 0;
     markFlash(defenderKey, "evade");
-    pushLog(`${defender.name} slipped past ${attacker.name}'s ${action}.`, "evade");
+    pushLog(`${defender.name} تفادى هجمة ${attacker.name}.`, "evade");
+    spawnFloatingText(defenderKey, "تفادي", "evade");
     playTone("miss");
   } else {
     const damage = damageRoll(action, actorBladeId);
@@ -790,11 +975,13 @@ function resolveAction(attackerKey, defenderKey, action) {
         : Math.min(100, attacker.charge + chargeGain(action, actorBladeId));
     markFlash(attackerKey, action);
     markFlash(defenderKey, "hit");
+    spawnFloatingText(defenderKey, damage, "damage");
+    triggerScreenShake();
     pushLog(
-      `${attacker.name} landed ${action === "special" ? "a charged finisher" : "a clean strike"} for ${damage}.`,
+      `${attacker.name} وجه ${action === "special" ? "الضربة الخاصة" : "ضربة مباشرة"} بقيمة ${damage}.`,
       action === "special" ? "special" : "hit",
     );
-    playTone(action === "special" ? "special" : "hit");
+    playSfx(action === "special" ? "special" : "hit");
   }
 
   if (defender.hp <= 0) {
@@ -888,7 +1075,7 @@ function clearDuelTimers() {
 
 function startPracticeDuel() {
   state.screen = "duel";
-  state.duel = createDuel("practice", "Rogue Flux");
+  state.duel = createDuel("practice", "روغ فلوكس");
   render();
   runLoop();
 }
@@ -904,7 +1091,7 @@ async function openRoom() {
   try {
     api = await loadFirebaseApi();
   } catch (error) {
-    showToast("Firebase failed to load.");
+    showToast("فشل تحميل Firebase.");
     return false;
   }
 
@@ -926,14 +1113,14 @@ async function openRoom() {
     }
   }
 
-  showToast(lastError?.message || "Room creation failed.");
+  showToast(lastError?.message || "فشل إنشاء الغرفة.");
   return false;
 }
 
 async function joinRoom() {
   const code = state.roomCodeDraft.trim().toUpperCase();
   if (code.length < 4) {
-    showToast("Enter a valid room code.");
+    showToast("أدخل كود غرفة صحيح.");
     return false;
   }
 
@@ -951,7 +1138,7 @@ async function joinRoom() {
     render();
     return true;
   } catch (error) {
-    showToast(error?.message || "Could not join room.");
+    showToast(error?.message || "تعذر الانضمام إلى الغرفة.");
     return false;
   }
 }
@@ -965,7 +1152,7 @@ async function leaveActiveRoom() {
     const api = await loadFirebaseApi();
     await api.leaveRoom(state.roomCodeActive);
   } catch {
-    showToast("Leaving room failed.");
+    showToast("تعذر مغادرة الغرفة.");
   }
 
   detachRoomSubscription();
@@ -983,9 +1170,9 @@ async function startLiveRoomMatch() {
   try {
     const api = await loadFirebaseApi();
     await api.startRoomDuel(state.roomCodeActive);
-    showToast("Live room match started.");
+    showToast("تم بدء المواجهة الحية.");
   } catch (error) {
-    showToast(error?.message || "Could not start match.");
+    showToast(error?.message || "تعذر بدء المباراة.");
   }
 }
 
@@ -1002,7 +1189,7 @@ async function submitLiveAction(action) {
     const api = await loadFirebaseApi();
     await api.sendRoomAction(state.roomCodeActive, action);
   } catch {
-    showToast("Action sync failed.");
+    showToast("فشل مزامنة الحركة.");
   }
 }
 
@@ -1012,8 +1199,8 @@ function copyRoomLink() {
   }
   navigator.clipboard
     .writeText(state.roomInviteLink)
-    .then(() => showToast("Invite link copied."))
-    .catch(() => showToast("Copy blocked on this browser."));
+    .then(() => showToast("تم نسخ رابط الدعوة."))
+    .catch(() => showToast("المتصفح منع النسخ التلقائي."));
 }
 
 function restoreHashRoom() {
@@ -1074,7 +1261,61 @@ function levelProgress() {
   return Math.round((state.profile.xp / nextLevelXp(state.profile.level)) * 100);
 }
 
-function actionButton(label, action, detail) {
+const LABELS = {
+  avatars: {
+    nova: "نوفا",
+    flux: "فلوكس",
+    warden: "واردن",
+    ember: "إمبر",
+    arc: "آرك",
+    drift: "دريفت",
+  },
+  blades: {
+    ignite: "سيف الشعلة",
+    riptide: "ناب الموج",
+    comet: "نواة المذنب",
+    halo: "حافة الهالة",
+  },
+  skins: {
+    "crimson-rush": "اندفاع قرمزي",
+    "jade-circuit": "دارة اليشم",
+    "solar-drive": "نبض شمسي",
+    "glacier-loop": "حلقة جليدية",
+    "night-shift": "وردية الليل",
+  },
+};
+
+function localizedAvatar(id) {
+  return LABELS.avatars[id] || avatarById(id).name;
+}
+
+function localizedBlade(id) {
+  return LABELS.blades[id] || bladeById(id).name;
+}
+
+function localizedSkin(id) {
+  return LABELS.skins[id] || skinById(id).name;
+}
+
+function renderSplash() {
+  return `
+    <section class="splash-screen" style="background-image:url('${ASSET_URLS.backgrounds.splash}')">
+      <div class="splash-glass">
+        <img class="splash-logo" src="${ASSET_URLS.branding.logo}" alt="Duel Dash" />
+        <div class="eyebrow">تجهيز موارد اللعبة</div>
+        <h1 class="display-title">Duel Dash</h1>
+        <p class="subtitle">تحميل الواجهة، الصور، وتجهيز اتصال القتال قبل الدخول إلى الساحة.</p>
+        <div class="loading-bar"><span style="width:${bootRuntime.progress}%;"></span></div>
+        <div class="loading-meta">
+          <span>تحميل</span>
+          <span>${bootRuntime.progress}%</span>
+        </div>
+      </div>
+    </section>
+  `;
+}
+
+function actionButton(action, detail) {
   const duel = state.duel;
   if (!duel) {
     return "";
@@ -1088,68 +1329,55 @@ function actionButton(label, action, detail) {
   };
   const cooldownLeft = Math.max(0, fighter.cooldowns[action] - now());
   const percent = Math.round((cooldownLeft / cooldownMax[action]) * 100);
-  const specialReady = fighter.charge >= 100;
   const disabled = !canUseAction(fighter, action);
 
   return `
-    <button class="action-button" data-action="${action}" ${disabled ? "disabled" : ""}>
-      <span class="tag">${label}</span>
+    <button class="ability-card ${action}" data-action="${action}" ${disabled ? "disabled" : ""}>
+      <span class="ability-icon-wrap">
+        <img class="ability-icon" src="${getAbilityImage(action)}" alt="${detail.title}" />
+        <span class="cooldown-mask" style="height:${percent}%;"></span>
+      </span>
       <strong>${detail.title}</strong>
-      <span class="tiny">${detail.copy}</span>
-      ${
-        action === "special"
-          ? `<div class="cooldown-track"><div class="cooldown-fill" style="width:${disabled && !specialReady ? 100 : percent}%;"></div></div>`
-          : `<div class="cooldown-track"><div class="cooldown-fill" style="width:${percent}%;"></div></div>`
-      }
+      <span>${detail.copy}</span>
+      <small>${detail.tag}</small>
     </button>
   `;
 }
 
 function renderOnboarding() {
   return `
-    <section class="stack reveal">
-      <article class="hero">
-        <span class="eyebrow">PvP-ready PWA</span>
-        <h1 class="title">Duel Dash</h1>
-        <p class="subtitle">
-          A sharp 1v1 brawler with fast rounds, native-feel polish, and profile progression.
-        </p>
+    <section class="game-screen stack reveal">
+      <article class="hero-panel" style="background-image:url('${ASSET_URLS.backgrounds.lobby}')">
+        <img class="hero-logo" src="${ASSET_URLS.branding.logo}" alt="Duel Dash" />
+        <div class="eyebrow">واجهة عربية · PWA</div>
+        <h1 class="display-title">جهّز بطلك</h1>
+        <p class="subtitle">اختر شخصية وسلاحًا بصورة فعلية، ثم ادخل مباشرة إلى لوبي المواجهة.</p>
       </article>
 
-      <article class="card">
-        <div class="section-head">
+      <article class="panel shell-form">
+        <div class="panel-head">
           <div>
-            <h2>Create your fighter</h2>
-            <p class="muted">No signup wall. Your profile is saved on this device instantly.</p>
+            <h2>تأسيس الحساب</h2>
+            <p>لا يوجد تسجيل طويل. اسم وصورة وسلاح، ثم تبدأ اللعب فورًا.</p>
           </div>
-          <span class="pill">Step 1</span>
+          <span class="panel-pill">الخطوة 1</span>
         </div>
         <form id="onboarding-form" class="stack">
           <label class="stack">
-            <span class="tiny">Pilot name</span>
-            <input
-              type="text"
-              name="name"
-              maxlength="16"
-              placeholder="Type your duelist name"
-              required
-            />
+            <span class="field-label">اسم اللاعب</span>
+            <input type="text" name="name" maxlength="16" placeholder="اكتب اسمك داخل الساحة" required />
           </label>
 
           <div class="stack">
-            <span class="tiny">Choose avatar</span>
-            <div class="avatar-grid">
+            <span class="field-label">اختر الشخصية</span>
+            <div class="media-grid media-grid-avatars">
               ${avatars
                 .map(
                   (avatar, index) => `
-                    <button
-                      type="button"
-                      class="choice-card ${index === 0 ? "is-selected" : ""}"
-                      data-avatar="${avatar.id}"
-                    >
-                      <span class="avatar-sigil" style="background:${avatar.gradient};">${avatar.sigil}</span>
-                      <strong>${avatar.name}</strong>
-                      <span class="tiny">Arena signature</span>
+                    <button type="button" class="media-card ${index === 0 ? "is-selected" : ""}" data-avatar="${avatar.id}">
+                      <img src="${getFighterImage(avatar.id)}" alt="${localizedAvatar(avatar.id)}" />
+                      <strong>${localizedAvatar(avatar.id)}</strong>
+                      <span>أسلوب قتال مختلف</span>
                     </button>
                   `,
                 )
@@ -1159,19 +1387,15 @@ function renderOnboarding() {
           </div>
 
           <div class="stack">
-            <span class="tiny">Starter blade</span>
-            <div class="weapon-grid">
+            <span class="field-label">اختر السلاح</span>
+            <div class="media-grid media-grid-weapons">
               ${blades
                 .map(
                   (blade, index) => `
-                    <button
-                      type="button"
-                      class="choice-card ${index === 0 ? "is-selected" : ""}"
-                      data-blade="${blade.id}"
-                    >
-                      <strong>${blade.name}</strong>
-                      <span class="tiny">${blade.vibe}</span>
-                      <p class="tiny">${blade.bonus}</p>
+                    <button type="button" class="media-card weapon-card ${index === 0 ? "is-selected" : ""}" data-blade="${blade.id}">
+                      <img src="${getBladeImage(blade.id)}" alt="${localizedBlade(blade.id)}" />
+                      <strong>${localizedBlade(blade.id)}</strong>
+                      <span>${blade.bonus}</span>
                     </button>
                   `,
                 )
@@ -1180,11 +1404,46 @@ function renderOnboarding() {
             <input type="hidden" name="bladeId" value="${blades[0].id}" />
           </div>
 
-          <button class="btn btn-primary" type="submit">Enter the Arena</button>
+          <button class="btn btn-play" type="submit">ادخل اللوبي</button>
         </form>
       </article>
     </section>
   `;
+}
+
+function fighterImageFor(fighter, fallbackAvatar = "rival") {
+  return getFighterImage(fighter.avatarId || fallbackAvatar);
+}
+
+function bladeImageFor(fighter, fallbackBlade = "ignite") {
+  return getBladeImage(fighter.bladeId || fallbackBlade);
+}
+
+function renderFloatingTexts() {
+  return uiRuntime.floatingTexts
+    .map((item) => {
+      const content = item.variant === "evade" ? "تفادي" : `-${item.value}`;
+      return `
+        <span class="floating-text ${item.side} ${item.variant}">
+          ${content}
+        </span>
+      `;
+    })
+    .join("");
+}
+
+function localizedTone(tone) {
+  const labels = {
+    start: "بداية",
+    info: "معلومة",
+    hit: "ضربة",
+    special: "خاص",
+    dash: "اندفاعة",
+    evade: "تفادٍ",
+    win: "فوز",
+    loss: "خسارة",
+  };
+  return labels[tone] || tone;
 }
 
 function renderHome() {
@@ -1196,107 +1455,125 @@ function renderHome() {
   const skin = currentSkin();
   const blade = currentBlade();
   const missions = dailyMissions();
+  const unlockedSkinCount = availableSkins().length;
 
   return `
-    <section class="stack reveal">
-      <article class="hero">
-        <div class="profile-strip">
-          <span class="eyebrow">Level ${profile.level}</span>
-          <span class="pill">${profile.coins} coins</span>
+    <section class="game-screen stack reveal">
+      <article class="hero-panel lobby-hero" style="background-image:url('${ASSET_URLS.backgrounds.lobby}')">
+        <div class="hero-topline">
+          <span class="eyebrow">اللوبي الرئيسي</span>
+          <span class="hero-status ${roomRuntime.connected ? "online" : ""}">
+            ${roomRuntime.connected ? "متصل" : "جارٍ الاتصال"}
+          </span>
         </div>
-        <h1 class="title">Ready for the next clash, ${profile.name}?</h1>
-        <p class="subtitle">
-          Create a room, quick duel a practice rival, and keep unlocking new skins every few wins.
-        </p>
-        <div class="stack">
-          <div class="xp-track"><div class="xp-fill" style="width:${levelProgress()}%;"></div></div>
-          <div class="profile-strip">
-            <span class="tiny">${profile.xp} / ${nextLevelXp(profile.level)} XP</span>
-            <span class="tiny">Restore code: ${profile.restoreCode}</span>
+
+        <div class="hero-player-card">
+          <div class="hero-player-media">
+            <img class="hero-fighter" src="${fighterImageFor({ avatarId: avatar.id }, avatar.id)}" alt="${localizedAvatar(avatar.id)}" />
+            <img class="hero-weapon" src="${getBladeImage(blade.id)}" alt="${localizedBlade(blade.id)}" />
+          </div>
+
+          <div class="hero-player-copy">
+            <div class="profile-strip">
+              <span class="panel-pill">المستوى ${profile.level}</span>
+              <span class="coin-pill">${profile.coins} كوين</span>
+            </div>
+            <h1 class="display-title">جاهز للمواجهة يا ${profile.name}</h1>
+            <p class="subtitle">اختر تجهيزتك، افتح غرفة، وابدأ قتال 1v1 مباشر من الآيفون وكأنها لعبة مثبتة فعلاً.</p>
+
+            <div class="xp-card">
+              <div class="xp-card-head">
+                <strong>شريط التطور</strong>
+                <span>${profile.xp} / ${nextLevelXp(profile.level)} XP</span>
+              </div>
+              <div class="xp-track"><div class="xp-fill" style="width:${levelProgress()}%;"></div></div>
+            </div>
           </div>
         </div>
       </article>
 
-      <article class="card">
-        <div class="section-head">
+      <article class="panel player-summary">
+        <div class="panel-head">
           <div>
-            <h2>Profile</h2>
-            <p class="muted">Designed to feel like an actual game account, minus the signup friction.</p>
+            <h2>بطاقة اللاعب</h2>
+            <p>هوية سريعة تشبه حسابات الألعاب: اسم، مستوى، عملات، وكود استرجاع محفوظ.</p>
           </div>
-          <span class="pill">${avatar.name}</span>
+          <button class="panel-pill" data-open-overlay="locker">الخزنة</button>
         </div>
 
-        <div class="stack">
-          <div class="profile-strip">
-            <div class="inline">
-              <span class="avatar-sigil" style="background:${skin.gradient};">${avatar.sigil}</span>
+        <div class="player-card-grid">
+          <div class="player-card-large">
+            <div class="player-card-header">
+              <img class="player-avatar" src="${fighterImageFor({ avatarId: avatar.id }, avatar.id)}" alt="${localizedAvatar(avatar.id)}" />
               <div>
                 <strong>${profile.name}</strong>
-                <div class="tiny">${blade.name} equipped</div>
+                <span>${localizedAvatar(avatar.id)} · ${localizedBlade(blade.id)}</span>
               </div>
             </div>
-            <span class="pill">${skin.name}</span>
-          </div>
 
-          <div class="metric-row">
-            <div class="metric">
-              <strong>${profile.wins}</strong>
-              <span>Wins</span>
-            </div>
-            <div class="metric">
-              <strong>${profile.losses}</strong>
-              <span>Losses</span>
-            </div>
-            <div class="metric">
-              <strong>${availableSkins().length}</strong>
-              <span>Skins</span>
+            <div class="player-restore">
+              <span>كود الاسترجاع</span>
+              <strong>${profile.restoreCode}</strong>
             </div>
           </div>
 
-          <div class="grid-2">
-            <button class="btn btn-primary" data-nav="duel">Quick Duel</button>
-            <button class="btn btn-secondary" data-nav="rooms">Create Room</button>
+          <div class="mini-stat">
+            <strong>${profile.wins}</strong>
+            <span>انتصارات</span>
+          </div>
+          <div class="mini-stat">
+            <strong>${profile.losses}</strong>
+            <span>هزائم</span>
+          </div>
+          <div class="mini-stat">
+            <strong>${unlockedSkinCount}</strong>
+            <span>سكنات مفتوحة</span>
           </div>
         </div>
       </article>
 
-      <article class="card">
-        <div class="section-head">
+      <article class="panel loadout-panel">
+        <div class="panel-head">
           <div>
-            <h2>Loadout</h2>
-            <p class="muted">Everything is stored locally so the app opens like a real game, not a website.</p>
+            <h2>التجهيزات الحالية</h2>
+            <p>البطل، السلاح، والسكن الحالي مع صور جاهزة للاستبدال لاحقًا بروابط Cloudinary.</p>
           </div>
-          <button class="pill" data-open-overlay="locker">Locker</button>
+          <span class="panel-pill">Inventory</span>
         </div>
-        <div class="inventory-row">
-          <div class="metric">
-            <strong>${blade.name}</strong>
+
+        <div class="locker-preview-grid">
+          <div class="inventory-tile featured">
+            <img src="${fighterImageFor({ avatarId: avatar.id }, avatar.id)}" alt="${localizedAvatar(avatar.id)}" />
+            <strong>${localizedAvatar(avatar.id)}</strong>
+            <span>الشخصية الأساسية</span>
+          </div>
+          <div class="inventory-tile">
+            <img src="${getSkinImage(skin.id)}" alt="${localizedSkin(skin.id)}" />
+            <strong>${localizedSkin(skin.id)}</strong>
+            <span>السكن الحالي</span>
+          </div>
+          <div class="inventory-tile">
+            <img src="${getBladeImage(blade.id)}" alt="${localizedBlade(blade.id)}" />
+            <strong>${localizedBlade(blade.id)}</strong>
             <span>${blade.bonus}</span>
           </div>
-          <div class="metric">
-            <strong>${skin.name}</strong>
-            <span>Equipped skin</span>
-          </div>
-          <div class="metric">
-            <strong>${avatar.name}</strong>
-            <span>Current avatar</span>
-          </div>
         </div>
       </article>
 
-      <article class="card">
-        <div class="section-head">
+      <article class="panel mission-panel">
+        <div class="panel-head">
           <div>
-            <h2>Daily pulse</h2>
-            <p class="muted">Simple loops that keep progression alive without heavy backend work.</p>
+            <h2>مهام اليوم</h2>
+            <p>لفات تقدم بسيطة تبقي الحساب حيًا بدون تعقيد تسجيل أو باك إند إضافي.</p>
           </div>
-          <span class="pill">2 missions</span>
+          <span class="panel-pill">${missions.length} مهام</span>
         </div>
-        <div class="stack">
+
+        <div class="mission-grid">
           ${missions
             .map(
               (mission) => `
-                <div class="metric">
+                <div class="mission-card">
                   <strong>${mission.title}</strong>
                   <span>${mission.reward}</span>
                 </div>
@@ -1305,6 +1582,8 @@ function renderHome() {
             .join("")}
         </div>
       </article>
+
+      <button class="btn btn-play btn-play-xl" data-nav="duel">ابدأ مواجهة سريعة</button>
     </section>
   `;
 }
@@ -1598,6 +1877,340 @@ function unlockOverlay() {
   `;
 }
 
+function renderRoomsGame() {
+  const players = roomPlayers();
+  const hasActiveRoom = Boolean(roomRuntime.room);
+  const roomStatus =
+    state.duel?.mode === "room" && state.duel.roomCode === state.roomCodeActive
+      ? state.duel.status
+      : roomRuntime.room?.duel?.status || roomRuntime.room?.status || "idle";
+  const liveDuelReady = players.length === 2;
+  const canStart = hasActiveRoom && isRoomHost() && liveDuelReady;
+
+  return `
+    <section class="game-screen stack reveal">
+      <article class="hero-panel room-hero" style="background-image:url('${ASSET_URLS.backgrounds.room}')">
+        <div class="hero-topline">
+          <span class="eyebrow">غرفة اللعب</span>
+          <span class="hero-status ${roomRuntime.connected ? "online" : ""}">
+            ${roomRuntime.connected ? "Firebase متصل" : "انتظار قاعدة البيانات"}
+          </span>
+        </div>
+        <h1 class="display-title">لوبي الدعوة والمواجهة</h1>
+        <p class="subtitle">كوّد سريع، دخول من جهازين، ثم بدء الجولة الحية من نفس الغرفة بدون أي صفحة ويب تقليدية.</p>
+      </article>
+
+      <article class="panel room-panel">
+        <div class="panel-head">
+          <div>
+            <h2>الغرفة الحالية</h2>
+            <p>أنشئ روم جديد أو شارك الكود مع صديقك ثم ابدأ المواجهة المباشرة.</p>
+          </div>
+          <button class="panel-pill" data-room="generate">كود جديد</button>
+        </div>
+
+        <div class="room-code-card">
+          <span>Room Code</span>
+          <strong>${state.roomCodeActive || "------"}</strong>
+          <small>${hasActiveRoom ? `الحالة: ${roomStatus}` : "لا توجد غرفة مرتبطة حاليًا"}</small>
+        </div>
+
+        <div class="room-action-grid">
+          <button class="btn btn-primary" data-room="copy" ${state.roomInviteLink ? "" : "disabled"}>نسخ رابط الدعوة</button>
+          <button class="btn btn-accent" data-room="start-live" ${canStart ? "" : "disabled"}>
+            ${roomStatus === "live" ? "المعركة بدأت" : isRoomHost() ? "ابدأ المباراة الحية" : "المضيف يبدأ المباراة"}
+          </button>
+          <button class="btn btn-secondary" data-room="open-duel" ${roomStatus === "live" || roomStatus === "done" ? "" : "disabled"}>
+            فتح ساحة القتال
+          </button>
+          <button class="btn btn-secondary" data-room="leave" ${hasActiveRoom ? "" : "disabled"}>مغادرة الغرفة</button>
+        </div>
+      </article>
+
+      <article class="panel room-panel">
+        <div class="panel-head">
+          <div>
+            <h2>انضمام سريع</h2>
+            <p>الصق الكود أو استخدم رابط الدعوة. بمجرد دخول لاعبين اثنين تصبح الغرفة جاهزة.</p>
+          </div>
+          <span class="panel-pill">${players.length}/2</span>
+        </div>
+
+        <label class="stack">
+          <span class="field-label">كود الغرفة</span>
+          <input
+            id="room-code-input"
+            type="text"
+            maxlength="8"
+            value="${state.roomCodeDraft}"
+            placeholder="ABCD12"
+          />
+        </label>
+        <button class="btn btn-secondary" data-room="join">انضم الآن</button>
+
+        <div class="room-players-grid">
+          ${
+            players.length
+              ? players
+                  .map((player) => {
+                    const isHost = player.id === roomRuntime.room?.hostId;
+                    return `
+                      <div class="room-player-card">
+                        <img src="${getFighterImage(player.avatarId)}" alt="${player.name}" />
+                        <div>
+                          <strong>${player.name}</strong>
+                          <span>${localizedBlade(player.bladeId)} · مستوى ${player.level || 1}</span>
+                        </div>
+                        ${isHost ? `<em>المضيف</em>` : ""}
+                      </div>
+                    `;
+                  })
+                  .join("")
+              : `
+                <div class="empty-room-state">
+                  <strong>بانتظار اللاعبين</strong>
+                  <span>عندما يدخل لاعبان، ستظهر بطاقات الشخصيات هنا مباشرة.</span>
+                </div>
+              `
+          }
+        </div>
+      </article>
+    </section>
+  `;
+}
+
+function renderDuelGame() {
+  const duel = state.duel;
+  if (!duel) {
+    return "";
+  }
+
+  const timeLeft = duelTimeLeft();
+  const playerHp = Math.max(0, Math.round(duel.player.hp));
+  const rivalHp = Math.max(0, Math.round(duel.rival.hp));
+  const resultText =
+    duel.status === "done"
+      ? duel.winner === "player"
+        ? "انتصار"
+        : "هزيمة"
+      : duel.mode === "practice"
+        ? "تجريب سريع"
+        : duel.roomCode || "مبارزة حية";
+
+  return `
+    <section class="game-screen duel-screen reveal">
+      <article class="battle-shell ${uiRuntime.shakeUntil > Date.now() ? "is-shaking" : ""}" style="background-image:url('${ASSET_URLS.backgrounds.arena}')">
+        <div class="battle-hud">
+          <div class="fighter-hud player ${duel.player.flash}">
+            <div class="fighter-hud-head">
+              <img class="fighter-portrait" src="${fighterImageFor(duel.player, state.profile?.avatarId || "nova")}" alt="${duel.player.name}" />
+              <div>
+                <strong>${duel.player.name}</strong>
+                <span>${playerHp} / 100 HP</span>
+              </div>
+            </div>
+            <div class="hp-track game"><div class="hp-fill" style="width:${playerHp}%;"></div></div>
+            <div class="charge-track"><div class="charge-fill" style="width:${duel.player.charge}%;"></div></div>
+          </div>
+
+          <div class="battle-center-hud">
+            <span class="timer-badge">${timeLeft}</span>
+            <strong>${resultText}</strong>
+            <small>${duel.mode === "practice" ? "مواجهة تدريب" : "مواجهة أونلاين"}</small>
+          </div>
+
+          <div class="fighter-hud rival ${duel.rival.flash}">
+            <div class="fighter-hud-head">
+              <img class="fighter-portrait" src="${fighterImageFor(duel.rival, "rival")}" alt="${duel.rival.name}" />
+              <div>
+                <strong>${duel.rival.name}</strong>
+                <span>${rivalHp} / 100 HP</span>
+              </div>
+            </div>
+            <div class="hp-track game rival"><div class="hp-fill" style="width:${rivalHp}%;"></div></div>
+            <div class="charge-track rival"><div class="charge-fill" style="width:${duel.rival.charge}%;"></div></div>
+          </div>
+        </div>
+
+        <div class="arena-stage">
+          <div class="arena-fighter arena-player ${duel.player.flash}">
+            <img class="arena-character" src="${fighterImageFor(duel.player, state.profile?.avatarId || "nova")}" alt="${duel.player.name}" />
+            <img class="arena-weapon" src="${bladeImageFor(duel.player, state.profile?.bladeId || "ignite")}" alt="weapon" />
+          </div>
+
+          <div class="arena-vfx-layer">
+            ${renderFloatingTexts()}
+          </div>
+
+          <div class="arena-fighter arena-rival ${duel.rival.flash}">
+            <img class="arena-character" src="${fighterImageFor(duel.rival, "rival")}" alt="${duel.rival.name}" />
+            <img class="arena-weapon" src="${bladeImageFor(duel.rival, "ignite")}" alt="weapon" />
+          </div>
+        </div>
+
+        <div class="battle-controls">
+          ${actionButton("attack", {
+            title: "ضربة سريعة",
+            copy: "ضربة مباشرة تبني الشحن بسرعة.",
+            tag: "Tap",
+          })}
+          ${actionButton("dash", {
+            title: "اندفاعة",
+            copy: "تفادٍ قصير مع فرصة رد هجومي.",
+            tag: "Swipe",
+          })}
+          ${actionButton("special", {
+            title: "الضربة الخاصة",
+            copy: duel.player.charge >= 100 ? "مجهزة الآن لإنهاء الجولة." : "اشحن العداد حتى 100%.",
+            tag: "Hold",
+          })}
+        </div>
+      </article>
+
+      <article class="panel battle-log-panel">
+        <div class="panel-head">
+          <div>
+            <h2>سجل القتال</h2>
+            <p>${duel.mode === "practice" ? "هذه المواجهة تعمل محليًا كتدريب سريع." : "هذا السجل ناتج عن أحداث الغرفة المتزامنة عبر Firebase."}</p>
+          </div>
+          <button class="panel-pill" data-duel="${duel.mode === "practice" ? "restart" : "rooms"}">
+            ${duel.mode === "practice" ? "إعادة اللعب" : "العودة للغرفة"}
+          </button>
+        </div>
+
+        <div class="combat-log-grid">
+          ${duel.log
+            .map(
+              (entry) => `
+                <div class="combat-log-item ${entry.tone}">
+                  <strong>${localizedTone(entry.tone)}</strong>
+                  <span>${entry.text}</span>
+                </div>
+              `,
+            )
+            .join("")}
+        </div>
+      </article>
+    </section>
+  `;
+}
+
+function lockerOverlayGame() {
+  const profile = state.profile;
+  const selectedSkin = currentSkin();
+  const selectedBlade = currentBlade();
+
+  return `
+    <div class="overlay" data-close-overlay="true">
+      <div class="sheet sheet-locker" onclick="event.stopPropagation()">
+        <div class="sheet-head">
+          <div>
+            <h2>الخزنة</h2>
+            <p>اختيار السكن والسلاح من واجهة شبكية مثل ألعاب الموبايل.</p>
+          </div>
+          <button class="panel-pill" data-close-overlay="true">إغلاق</button>
+        </div>
+
+        <div class="sheet-section">
+          <div class="section-headline">
+            <strong>السكنات</strong>
+            <span>${availableSkins().length}/${skins.length}</span>
+          </div>
+          <div class="media-grid media-grid-locker">
+            ${skins
+              .map((skin) => {
+                const unlocked = profile.unlockedSkins.includes(skin.id);
+                const selected = selectedSkin.id === skin.id;
+                return `
+                  <button
+                    class="media-card locker-card ${selected ? "is-selected" : ""}"
+                    data-skin="${skin.id}"
+                    ${unlocked ? "" : "disabled"}
+                  >
+                    <img src="${getSkinImage(skin.id)}" alt="${localizedSkin(skin.id)}" />
+                    <strong>${localizedSkin(skin.id)}</strong>
+                    <span>${unlocked ? "مفتوح" : `يفتح عند المستوى ${skin.unlockLevel}`}</span>
+                  </button>
+                `;
+              })
+              .join("")}
+          </div>
+        </div>
+
+        <div class="sheet-section">
+          <div class="section-headline">
+            <strong>الأسلحة</strong>
+            <span>${blades.length} متاح</span>
+          </div>
+          <div class="media-grid media-grid-locker">
+            ${blades
+              .map(
+                (blade) => `
+                  <button class="media-card locker-card ${selectedBlade.id === blade.id ? "is-selected" : ""}" data-blade-select="${blade.id}">
+                    <img src="${getBladeImage(blade.id)}" alt="${localizedBlade(blade.id)}" />
+                    <strong>${localizedBlade(blade.id)}</strong>
+                    <span>${blade.bonus}</span>
+                  </button>
+                `,
+              )
+              .join("")}
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function unlockOverlayGame() {
+  const skin = skins.find((item) => item.id === state.overlay?.skinId);
+  if (!skin) {
+    return "";
+  }
+
+  return `
+    <div class="overlay" data-close-unlock="true">
+      <div class="sheet unlock-sheet" onclick="event.stopPropagation()">
+        <div class="unlock-burst"></div>
+        <img class="unlock-image" src="${getSkinImage(skin.id)}" alt="${localizedSkin(skin.id)}" />
+        <div class="sheet-head centered">
+          <div>
+            <h2>تم فتح سكن جديد</h2>
+            <p>السكن أضيف تلقائيًا وتم تجهيزه على حسابك الحالي.</p>
+          </div>
+        </div>
+        <div class="unlock-meta">
+          <strong>${localizedSkin(skin.id)}</strong>
+          <span>تم فتحه عند المستوى ${state.profile.level}</span>
+        </div>
+        <button class="btn btn-primary" data-close-unlock="true">متابعة</button>
+      </div>
+    </div>
+  `;
+}
+
+function renderToastGame() {
+  return `
+    <div class="toast-wrap ${state.toast ? "" : "hide"}">
+      <div class="toast">${state.toast || ""}</div>
+    </div>
+  `;
+}
+
+function renderNavGame() {
+  if (!state.profile || state.screen === "onboarding" || state.screen === "duel" || !bootRuntime.ready) {
+    return "";
+  }
+
+  return `
+    <nav class="footer-nav">
+      <button class="nav-chip ${state.screen === "home" ? "is-active" : ""}" data-nav="home">الرئيسية</button>
+      <button class="nav-chip ${state.screen === "duel" ? "is-active" : ""}" data-nav="duel">القتال</button>
+      <button class="nav-chip ${state.screen === "rooms" ? "is-active" : ""}" data-nav="rooms">الغرف</button>
+      <button class="nav-chip" data-open-overlay="locker">الخزنة</button>
+    </nav>
+  `;
+}
+
 function renderToast() {
   return `
     <div class="toast-wrap ${state.toast ? "" : "hide"}">
@@ -1623,32 +2236,38 @@ function renderNav() {
 function render(attachEvents = true) {
   let screenMarkup = "";
 
-  if (state.screen === "home") {
+  if (!bootRuntime.ready) {
+    screenMarkup = renderSplash();
+  } else if (state.screen === "home") {
     screenMarkup = renderHome();
   } else if (state.screen === "rooms") {
-    screenMarkup = renderRooms();
+    screenMarkup = renderRoomsGame();
   } else if (state.screen === "duel") {
-    screenMarkup = renderDuel();
+    screenMarkup = renderDuelGame();
   } else {
     screenMarkup = renderOnboarding();
   }
 
   app.innerHTML = `
-    <main class="app-shell">
+    <main class="app-shell ${state.screen === "duel" ? "screen-duel" : ""}">
       ${screenMarkup}
-      ${renderNav()}
+      ${renderNavGame()}
     </main>
     ${
-      state.overlay?.type === "locker"
-        ? lockerOverlay()
-        : state.overlay?.type === "unlock"
-          ? unlockOverlay()
-          : ""
+      bootRuntime.ready
+        ? state.overlay?.type === "locker"
+          ? lockerOverlayGame()
+          : state.overlay?.type === "unlock"
+            ? unlockOverlayGame()
+            : ""
+        : ""
     }
-    ${renderToast()}
+    ${renderToastGame()}
   `;
 
-  if (attachEvents) {
+  syncAudioForScreen();
+
+  if (attachEvents && bootRuntime.ready) {
     bindEvents();
   }
 }
@@ -1743,12 +2362,21 @@ function bindEvents() {
     });
   });
 
+  document.querySelectorAll("[data-blade-select]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.profile.bladeId = button.dataset.bladeSelect;
+      saveState();
+      void syncCurrentRoomProfile();
+      render();
+    });
+  });
+
   document.querySelectorAll("[data-room]").forEach((button) => {
     button.addEventListener("click", async () => {
       const action = button.dataset.room;
       if (action === "generate") {
         if (await openRoom()) {
-          showToast("Live room created.");
+          showToast("تم إنشاء غرفة جديدة.");
         }
       }
       if (action === "copy") {
@@ -1756,7 +2384,7 @@ function bindEvents() {
       }
       if (action === "join") {
         if (await joinRoom()) {
-          showToast(`Joined room ${state.roomCodeActive}.`);
+          showToast(`تم دخول الغرفة ${state.roomCodeActive}.`);
         }
       }
       if (action === "start-live") {
@@ -1825,6 +2453,7 @@ async function initRealtimeBackground() {
 restoreHashRoom();
 render();
 saveSettings();
+void bootAssets();
 void initRealtimeBackground();
 
 if ("serviceWorker" in navigator) {
