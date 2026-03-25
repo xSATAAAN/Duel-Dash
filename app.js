@@ -2642,7 +2642,7 @@ function renderDuelGame() {
 
   return `
     <section class="game-screen duel-screen reveal">
-      <article class="battle-shell ${uiRuntime.shakeUntil > Date.now() ? "is-shaking" : ""} ${duel.status === "done" ? "is-finished" : ""}" style="--shake-intensity:${uiRuntime.shakeIntensity}px;">
+      <article class="battle-shell game-viewport ${uiRuntime.shakeUntil > Date.now() ? "is-shaking" : ""} ${duel.status === "done" ? "is-finished" : ""}" style="--shake-intensity:${uiRuntime.shakeIntensity}px;">
         <div class="battle-backdrop">
           <span class="battle-layer layer-far"></span>
           <span class="battle-layer layer-mid"></span>
@@ -2685,10 +2685,13 @@ function renderDuelGame() {
           <div class="arena-vfx-layer">
             ${renderFloatingTexts()}
           </div>
+          <div class="arena-ring-glow"></div>
           <div class="arena-floor"></div>
 
           <div class="arena-fighter arena-player ${duel.player.flash}">
+            <div class="combatant-nameplate">${duel.player.name}</div>
             <span class="shield-effect"></span>
+            <span class="combatant-shadow-ring"></span>
             <div class="combatant idle">
               ${renderCombatantSvg(duel.player, "player")}
             </div>
@@ -2699,7 +2702,9 @@ function renderDuelGame() {
           </div>
 
           <div class="arena-fighter arena-rival ${duel.rival.flash}">
+            <div class="combatant-nameplate">${duel.rival.name}</div>
             <span class="shield-effect"></span>
+            <span class="combatant-shadow-ring"></span>
             <div class="combatant idle rival">
               ${renderCombatantSvg(duel.rival, "rival")}
             </div>

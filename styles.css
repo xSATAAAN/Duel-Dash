@@ -2081,3 +2081,534 @@ input:focus {
     font-size: 1.7rem;
   }
 }
+
+.orientation-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: 9999;
+  display: none;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  padding: 0;
+  background: rgba(15, 15, 20, 0.9);
+  backdrop-filter: blur(15px);
+}
+
+.orientation-card {
+  width: min(88vw, 520px);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 16px;
+  padding: 0 8vw;
+  text-align: center;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+}
+
+.orientation-icon {
+  width: min(42vw, 220px);
+  height: min(42vw, 220px);
+  filter: drop-shadow(0 0 28px rgba(89, 211, 255, 0.35));
+}
+
+.orientation-card strong {
+  font-size: clamp(2.1rem, 5vw, 3.6rem);
+  color: #f4fbff;
+  text-shadow: 0 0 20px rgba(89, 211, 255, 0.22);
+}
+
+.orientation-card span {
+  max-width: 30rem;
+  font-size: clamp(1rem, 2.3vw, 1.25rem);
+  color: rgba(231, 240, 255, 0.8);
+}
+
+.app-shell.screen-duel {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  max-height: -webkit-fill-available;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 18% 14%, rgba(255, 111, 70, 0.18), transparent 22%),
+    radial-gradient(circle at 82% 16%, rgba(89, 211, 255, 0.2), transparent 22%),
+    linear-gradient(180deg, #050911 0%, #070d17 100%);
+}
+
+.duel-screen {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+  min-height: 100vh;
+  overflow: hidden;
+}
+
+.game-viewport,
+.battle-shell.game-viewport {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+  max-height: -webkit-fill-available;
+  min-height: 100vh;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 50% 42%, rgba(31, 71, 96, 0.42), transparent 30%),
+    radial-gradient(circle at 20% 18%, rgba(255, 111, 70, 0.18), transparent 18%),
+    radial-gradient(circle at 80% 16%, rgba(89, 211, 255, 0.16), transparent 18%),
+    linear-gradient(180deg, #060a12 0%, #08101a 44%, #0c1520 100%);
+  box-shadow: inset 0 0 0 2px rgba(129, 242, 255, 0.15);
+}
+
+.battle-layer.layer-far {
+  background:
+    radial-gradient(circle at 16% 14%, rgba(255, 111, 70, 0.28), transparent 16%),
+    radial-gradient(circle at 82% 18%, rgba(89, 211, 255, 0.24), transparent 16%),
+    linear-gradient(180deg, #05070d 0%, #09111a 42%, #0d1823 100%);
+}
+
+.battle-layer.layer-mid {
+  background:
+    linear-gradient(90deg, transparent 0 8%, rgba(255,255,255,.04) 8% 9%, transparent 9% 18%, rgba(255,255,255,.035) 18% 19%, transparent 19% 100%),
+    linear-gradient(180deg, transparent 0 38%, rgba(89, 211, 255, 0.08) 38% 40%, transparent 40% 100%);
+}
+
+.battle-layer.layer-neon {
+  background:
+    radial-gradient(circle at 18% 72%, rgba(255, 111, 70, 0.18), transparent 12%),
+    radial-gradient(circle at 82% 68%, rgba(89, 211, 255, 0.18), transparent 12%),
+    linear-gradient(180deg, transparent 0 60%, rgba(89, 211, 255, 0.08) 60% 61%, transparent 61% 100%);
+}
+
+.battle-hud {
+  position: absolute;
+  top: calc(var(--safe-top) + 2.2vh);
+  left: 2.5vw;
+  right: 2.5vw;
+  height: 12vh;
+  z-index: 8;
+  display: block;
+}
+
+.battle-health-card,
+.battle-center-hud {
+  position: absolute;
+  top: 0;
+  backdrop-filter: blur(16px);
+  border: 2px solid rgba(113, 229, 255, 0.28);
+  box-shadow:
+    0 0 18px rgba(89, 211, 255, 0.16),
+    inset 0 1px 0 rgba(255,255,255,.12);
+}
+
+.battle-health-card {
+  width: 34vw;
+  max-width: 430px;
+  min-width: 260px;
+  padding: 12px 14px;
+  border-radius: 22px;
+  background:
+    radial-gradient(circle at top, rgba(255,255,255,.08), transparent 50%),
+    linear-gradient(180deg, rgba(9, 15, 24, 0.94), rgba(5, 10, 18, 0.92));
+}
+
+.battle-health-card.player {
+  left: 0;
+}
+
+.battle-health-card.rival {
+  right: 0;
+}
+
+.battle-center-hud {
+  left: 50%;
+  transform: translateX(-50%);
+  min-width: 150px;
+  padding: 10px 18px;
+  border-radius: 26px;
+  background:
+    radial-gradient(circle at top, rgba(255,255,255,.1), transparent 55%),
+    linear-gradient(180deg, rgba(12, 17, 27, 0.96), rgba(7, 11, 18, 0.94));
+  text-align: center;
+}
+
+.battle-center-hud strong {
+  display: block;
+  font-family: "Lalezar", "Changa", sans-serif;
+  font-size: 1.2rem;
+  letter-spacing: 0.02em;
+}
+
+.timer-badge {
+  display: inline-grid;
+  place-items: center;
+  min-width: 58px;
+  min-height: 58px;
+  margin-bottom: 8px;
+  border-radius: 50%;
+  background: radial-gradient(circle, #fff1ca 0%, #ffbc67 54%, #ff7b3d 100%);
+  color: #09101a;
+  font-family: "Lalezar", "Changa", sans-serif;
+  font-size: 1.4rem;
+  box-shadow:
+    0 0 24px rgba(255, 190, 103, 0.35),
+    0 0 0 4px rgba(255,255,255,.08);
+}
+
+.health-meta {
+  font-size: 1rem;
+}
+
+.health-meta strong {
+  font-family: "Lalezar", "Changa", sans-serif;
+  font-size: 1.15rem;
+}
+
+.hp-frame {
+  padding: 5px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgba(255,255,255,.32), rgba(72,80,92,.16));
+}
+
+.hp-track.game {
+  height: 24px;
+  background: rgba(0, 0, 0, 0.42);
+}
+
+.hp-track.game .hp-fill {
+  box-shadow: 0 0 16px rgba(161, 255, 112, 0.22);
+}
+
+.arena-stage {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  width: 100%;
+  height: 100%;
+}
+
+.arena-ring-glow {
+  position: absolute;
+  left: 50%;
+  bottom: 22vh;
+  width: 48vw;
+  height: 20vh;
+  transform: translateX(-50%);
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at center, rgba(89, 211, 255, 0.26), rgba(89, 211, 255, 0.06) 42%, rgba(89, 211, 255, 0) 72%);
+  filter: blur(8px);
+  opacity: 0.9;
+}
+
+.arena-floor {
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 29vh;
+  border-radius: 0;
+  border: 0;
+  background:
+    linear-gradient(180deg, rgba(255,255,255,.08), rgba(255,255,255,0) 16%),
+    repeating-linear-gradient(90deg, rgba(89,211,255,.14) 0 2px, transparent 2px 42px),
+    linear-gradient(180deg, rgba(13, 22, 35, 0) 0%, rgba(13, 22, 35, 0.6) 18%, rgba(4, 8, 14, 0.98) 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.08),
+    0 -14px 40px rgba(89, 211, 255, 0.08);
+}
+
+.arena-fighter {
+  position: absolute;
+  bottom: 15vh;
+  z-index: 6;
+  width: clamp(150px, 18vw, 230px);
+  height: clamp(200px, 34vh, 320px);
+  display: block;
+}
+
+.arena-player {
+  left: 10vw;
+}
+
+.arena-rival {
+  right: 10vw;
+}
+
+.combatant-nameplate {
+  position: absolute;
+  top: -3.4vh;
+  left: 50%;
+  transform: translateX(-50%);
+  min-width: 110px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  border: 2px solid rgba(89, 211, 255, 0.28);
+  background: rgba(6, 10, 18, 0.88);
+  color: #f4fbff;
+  text-align: center;
+  font-family: "Lalezar", "Changa", sans-serif;
+  font-size: 1rem;
+  box-shadow: 0 0 16px rgba(89, 211, 255, 0.16);
+}
+
+.combatant-shadow-ring {
+  position: absolute;
+  left: 50%;
+  bottom: 1vh;
+  width: 72%;
+  height: 16%;
+  transform: translateX(-50%);
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(0,0,0,.52), rgba(0,0,0,0) 72%);
+  filter: blur(4px);
+}
+
+.combatant {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.combatant::before {
+  content: "";
+  position: absolute;
+  inset: 12% 12% 18%;
+  border-radius: 32px;
+  background:
+    radial-gradient(circle at 50% 30%, rgba(255,255,255,.18), rgba(255,255,255,0) 42%),
+    linear-gradient(180deg, rgba(89, 211, 255, 0.16), rgba(89, 211, 255, 0.02));
+  filter: blur(10px);
+}
+
+.combatant-svg {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  filter:
+    drop-shadow(0 0 14px rgba(89, 211, 255, 0.16))
+    drop-shadow(0 24px 38px rgba(0, 0, 0, 0.52));
+}
+
+.combatant.idle {
+  animation: idleBreath 2.1s ease-in-out infinite;
+}
+
+.fighter-charge {
+  position: absolute;
+  left: 50%;
+  bottom: -6.8vh;
+  width: 76%;
+  transform: translateX(-50%);
+  padding: 8px 10px;
+  border-radius: 18px;
+  border: 2px solid rgba(89, 211, 255, 0.22);
+  background: rgba(5, 10, 18, 0.82);
+  box-shadow: 0 0 14px rgba(89, 211, 255, 0.12);
+}
+
+.fighter-charge span {
+  font-size: 0.82rem;
+  color: rgba(235, 244, 255, 0.82);
+}
+
+.arena-vfx-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 9;
+  pointer-events: none;
+}
+
+.battle-controls {
+  position: absolute;
+  right: 4vw;
+  bottom: max(5vh, calc(var(--safe-bottom) + 12px));
+  z-index: 12;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  width: min(34vw, 360px);
+}
+
+.ability-card {
+  position: relative;
+  width: clamp(90px, 9.8vw, 112px);
+  min-width: 0;
+  height: clamp(90px, 9.8vw, 112px);
+  min-height: 0;
+  padding: 10px 8px;
+  border-radius: 50%;
+  border: 3px solid rgba(255,255,255,.14);
+  background: linear-gradient(to bottom, #ff4d4d, #cc0000);
+  box-shadow:
+    0 10px 0 #8b0000,
+    0 15px 20px rgba(0,0,0,.5),
+    0 0 18px rgba(255, 77, 77, 0.22);
+  transition: transform 90ms ease, box-shadow 90ms ease, filter 120ms ease;
+}
+
+.ability-card.dash {
+  background: linear-gradient(to bottom, #44d7ff, #005fca);
+  box-shadow:
+    0 10px 0 #003f86,
+    0 15px 20px rgba(0,0,0,.5),
+    0 0 18px rgba(68, 215, 255, 0.24);
+}
+
+.ability-card.special {
+  background: linear-gradient(to bottom, #ffd05d, #ff8c00);
+  box-shadow:
+    0 10px 0 #b15b00,
+    0 15px 20px rgba(0,0,0,.5),
+    0 0 18px rgba(255, 208, 93, 0.22);
+}
+
+.ability-card:active {
+  transform: translateY(10px);
+  box-shadow:
+    0 4px 0 rgba(0,0,0,.45),
+    0 8px 14px rgba(0,0,0,.38),
+    0 0 14px rgba(255,255,255,.12);
+}
+
+.ability-card:disabled {
+  opacity: 0.68;
+  filter: saturate(0.7) grayscale(0.08);
+}
+
+.ability-core {
+  height: 100%;
+  gap: 4px;
+}
+
+.ability-icon-wrap {
+  width: 48px;
+  height: 48px;
+  background: rgba(255,255,255,.12);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.12);
+}
+
+.ability-card strong {
+  font-size: 0.96rem;
+  color: #fff6ec;
+  font-family: "Lalezar", "Changa", sans-serif;
+}
+
+.ability-card small {
+  font-size: 0.72rem;
+  color: rgba(255, 244, 235, 0.86);
+}
+
+.cooldown-mask {
+  left: 0;
+  right: 0;
+  bottom: 0;
+  border-radius: 0 0 999px 999px;
+  background: rgba(6, 10, 18, 0.68);
+}
+
+.battle-feed {
+  position: absolute;
+  left: 3vw;
+  bottom: max(5vh, calc(var(--safe-bottom) + 12px));
+  z-index: 11;
+  width: min(28vw, 310px);
+  gap: 12px;
+}
+
+.battle-exit {
+  justify-self: start;
+  border: 2px solid rgba(255,255,255,.12);
+  background: rgba(8, 12, 20, 0.78);
+  color: #f7efe8;
+  box-shadow: 0 0 15px rgba(89, 211, 255, 0.14);
+}
+
+.battle-feed-list {
+  gap: 10px;
+}
+
+.combat-log-item {
+  border: 1px solid rgba(89, 211, 255, 0.16);
+  border-radius: 18px;
+  background:
+    radial-gradient(circle at top, rgba(255,255,255,.06), rgba(255,255,255,0) 56%),
+    rgba(7, 11, 18, 0.82);
+  box-shadow: 0 0 14px rgba(89, 211, 255, 0.08);
+}
+
+.floating-text {
+  font-family: "Lalezar", "Changa", sans-serif;
+  font-size: clamp(1.4rem, 2.4vw, 2rem);
+  color: #fff1c8;
+  text-shadow:
+    0 0 12px rgba(255, 111, 70, 0.42),
+    0 0 22px rgba(255,255,255,.2);
+}
+
+@media (orientation: portrait) {
+  #app {
+    opacity: 0;
+    pointer-events: none;
+    visibility: hidden;
+  }
+
+  .orientation-overlay {
+    display: flex;
+  }
+}
+
+@media (orientation: landscape) {
+  #app {
+    opacity: 1;
+    visibility: visible;
+  }
+
+  .orientation-overlay {
+    display: none;
+  }
+}
+
+@media (max-width: 900px) and (orientation: landscape) {
+  .battle-health-card {
+    width: 35vw;
+    min-width: 210px;
+    padding: 10px 12px;
+  }
+
+  .battle-center-hud {
+    min-width: 126px;
+    padding: 8px 14px;
+  }
+
+  .arena-fighter {
+    width: clamp(138px, 20vw, 192px);
+    height: clamp(188px, 32vh, 270px);
+  }
+
+  .battle-controls {
+    width: min(42vw, 320px);
+    gap: 10px;
+  }
+
+  .ability-card {
+    width: clamp(82px, 10vw, 98px);
+    height: clamp(82px, 10vw, 98px);
+  }
+
+  .battle-feed {
+    width: min(34vw, 240px);
+  }
+}
