@@ -1,19 +1,6 @@
-import {
-  createRoom,
-  getClientId,
-  getRealtimeInfo,
-  joinRoom as joinFirebaseRoom,
-  leaveRoom as leaveFirebaseRoom,
-  sendRoomAction,
-  setRoomHost,
-  startRoomDuel,
-  subscribeRealtimeInfo,
-  subscribeRoom,
-  syncPlayerProfile,
-} from "./firebase-client.js";
-
 const STORAGE_KEY = "duel-dash-state-v2";
 const SETTINGS_KEY = "duel-dash-settings-v1";
+const CLIENT_ID_KEY = "duel-dash-client-id-v1";
 
 const avatars = [
   { id: "nova", name: "Nova", sigil: "NV", gradient: "linear-gradient(135deg,#ff7c52,#ffd372)" },
@@ -90,6 +77,30 @@ function createUuid() {
   }
 
   return `dd-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function getAppClientId() {
+  const existing = localStorage.getItem(CLIENT_ID_KEY);
+  if (existing) {
+    return existing;
+  }
+
+  const next = `p-${Math.random().toString(36).slice(2, 12)}`;
+  localStorage.setItem(CLIENT_ID_KEY, next);
+  return next;
+}
+
+let firebaseApiPromise = null;
+
+async function loadFirebaseApi() {
+  if (!firebaseApiPromise) {
+    firebaseApiPromise = import("./firebase-client.js").catch((error) => {
+      firebaseApiPromise = null;
+      throw error;
+    });
+  }
+
+  return firebaseApiPromise;
 }
 
 let state = hydrateState();
@@ -291,7 +302,7 @@ function roomPlayers() {
 }
 
 function isRoomHost() {
-  return roomRuntime.room?.hostId === getClientId();
+  return roomRuntime.room?.hostId === getAppClientId();
 }
 
 function getServerNow() {
@@ -415,7 +426,7 @@ function applyRoomFxFromLatestAction(room) {
   }
 
   roomRuntime.latestActionId = latestId;
-  const isPlayer = latestAction.actorId === getClientId();
+  const isPlayer = latestAction.actorId === getAppClientId();
   roomRuntime.fx = {
     player: isPlayer ? (latestAction.type === "dash" ? "evade" : latestAction.type) : latestAction.type === "dash" ? "" : "hit",
     rival: isPlayer ? (latestAction.type === "dash" ? "" : "hit") : latestAction.type === "dash" ? "evade" : latestAction.type,
@@ -431,7 +442,7 @@ function buildRoomDuel(room) {
     return null;
   }
 
-  const myId = getClientId();
+  const myId = getAppClientId();
   const playersById = room.players || {};
   const rivalId = Object.keys(playersById).find((id) => id !== myId);
   if (!playersById[myId] || !rivalId) {
@@ -515,8 +526,9 @@ async function repairRoomHost(room) {
     .map((player) => player.id)
     .sort((left, right) => left.localeCompare(right))[0];
 
-  if (nextHostId === getClientId()) {
-    await setRoomHost(room.code, nextHostId);
+  if (nextHostId === getAppClientId()) {
+    const api = await loadFirebaseApi();
+    await api.setRoomHost(room.code, nextHostId);
   }
 }
 
@@ -547,10 +559,11 @@ function clearActiveRoomState() {
   saveState();
 }
 
-function attachRoomSubscription(code) {
+async function attachRoomSubscription(code) {
   detachRoomSubscription();
   roomRuntime.currentCode = code;
-  roomRuntime.roomUnsubscribe = subscribeRoom(code, async (room) => {
+  const api = await loadFirebaseApi();
+  roomRuntime.roomUnsubscribe = api.subscribeRoom(code, async (room) => {
     roomRuntime.room = room;
 
     if (!room) {
@@ -589,7 +602,8 @@ async function syncCurrentRoomProfile() {
   }
 
   try {
-    await syncPlayerProfile(state.roomCodeActive, state.profile);
+    const api = await loadFirebaseApi();
+    await api.syncPlayerProfile(state.roomCodeActive, state.profile);
   } catch {
     showToast("Room profile sync failed.");
   }
@@ -885,13 +899,21 @@ async function openRoom() {
   }
 
   let lastError = null;
+  let api;
+
+  try {
+    api = await loadFirebaseApi();
+  } catch (error) {
+    showToast("Firebase failed to load.");
+    return false;
+  }
 
   for (let attempt = 0; attempt < 5; attempt += 1) {
     const candidate = randomId();
     try {
-      const code = await createRoom(state.profile, candidate);
+      const code = await api.createRoom(state.profile, candidate);
       setRoomInvite(code);
-      attachRoomSubscription(code);
+      await attachRoomSubscription(code);
       state.screen = "rooms";
       saveState();
       render();
@@ -920,9 +942,10 @@ async function joinRoom() {
   }
 
   try {
-    const joinedCode = await joinFirebaseRoom(state.profile, code);
+    const api = await loadFirebaseApi();
+    const joinedCode = await api.joinRoom(state.profile, code);
     setRoomInvite(joinedCode);
-    attachRoomSubscription(joinedCode);
+    await attachRoomSubscription(joinedCode);
     state.screen = "rooms";
     saveState();
     render();
@@ -939,7 +962,8 @@ async function leaveActiveRoom() {
   }
 
   try {
-    await leaveFirebaseRoom(state.roomCodeActive);
+    const api = await loadFirebaseApi();
+    await api.leaveRoom(state.roomCodeActive);
   } catch {
     showToast("Leaving room failed.");
   }
@@ -957,7 +981,8 @@ async function startLiveRoomMatch() {
   }
 
   try {
-    await startRoomDuel(state.roomCodeActive);
+    const api = await loadFirebaseApi();
+    await api.startRoomDuel(state.roomCodeActive);
     showToast("Live room match started.");
   } catch (error) {
     showToast(error?.message || "Could not start match.");
@@ -974,7 +999,8 @@ async function submitLiveAction(action) {
   }
 
   try {
-    await sendRoomAction(state.roomCodeActive, action);
+    const api = await loadFirebaseApi();
+    await api.sendRoomAction(state.roomCodeActive, action);
   } catch {
     showToast("Action sync failed.");
   }
@@ -1769,20 +1795,29 @@ function bindEvents() {
   });
 }
 
-restoreHashRoom();
-roomRuntime.infoUnsubscribe = subscribeRealtimeInfo((info) => {
-  roomRuntime.connected = info.connected;
-  roomRuntime.serverOffset = info.serverOffset;
-  render();
-});
+async function initRealtimeBackground() {
+  try {
+    const api = await loadFirebaseApi();
+    roomRuntime.infoUnsubscribe = api.subscribeRealtimeInfo((info) => {
+      roomRuntime.connected = info.connected;
+      roomRuntime.serverOffset = info.serverOffset;
+      render();
+    });
 
+    if (state.profile && state.roomCodeActive) {
+      await attachRoomSubscription(state.roomCodeActive);
+      void joinRoom();
+    }
+  } catch {
+    roomRuntime.connected = false;
+    render();
+  }
+}
+
+restoreHashRoom();
 render();
 saveSettings();
-
-if (state.profile && state.roomCodeActive) {
-  attachRoomSubscription(state.roomCodeActive);
-  void joinRoom();
-}
+void initRealtimeBackground();
 
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
