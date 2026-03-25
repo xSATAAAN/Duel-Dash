@@ -1189,6 +1189,9 @@ function renderOnboarding() {
 
 function renderHome() {
   const profile = state.profile;
+  if (!profile) {
+    return renderOnboarding();
+  }
   const avatar = currentAvatar();
   const skin = currentSkin();
   const blade = currentBlade();
@@ -1618,16 +1621,21 @@ function renderNav() {
 }
 
 function render(attachEvents = true) {
-  const screenMap = {
-    onboarding: renderOnboarding(),
-    home: renderHome(),
-    rooms: renderRooms(),
-    duel: renderDuel(),
-  };
+  let screenMarkup = "";
+
+  if (state.screen === "home") {
+    screenMarkup = renderHome();
+  } else if (state.screen === "rooms") {
+    screenMarkup = renderRooms();
+  } else if (state.screen === "duel") {
+    screenMarkup = renderDuel();
+  } else {
+    screenMarkup = renderOnboarding();
+  }
 
   app.innerHTML = `
     <main class="app-shell">
-      ${screenMap[state.screen]}
+      ${screenMarkup}
       ${renderNav()}
     </main>
     ${
