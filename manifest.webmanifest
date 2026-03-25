@@ -5,7 +5,9 @@
   "dir": "rtl",
   "description": "لعبة مبارزة 1v1 تعمل كـ PWA على iPhone مع غرف مباشرة وتقدم محفوظ محليًا.",
   "start_url": "./",
+  "display_override": ["fullscreen", "standalone"],
   "display": "standalone",
+  "orientation": "landscape",
   "background_color": "#0c0d12",
   "theme_color": "#0c0d12",
   "icons": [

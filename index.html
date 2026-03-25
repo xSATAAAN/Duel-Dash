@@ -22,7 +22,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Changa:wght@400;500;700;800&family=Orbitron:wght@600;700;800&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Changa:wght@400;500;700;800&family=Lalezar&display=swap"
       rel="stylesheet"
     />
     <link rel="stylesheet" href="./styles.css" />
@@ -30,6 +30,27 @@
   </head>
   <body>
     <div id="app"></div>
+    <div id="orientation-overlay" class="orientation-overlay" aria-hidden="true">
+      <div class="orientation-card">
+        <div class="orientation-icon" aria-hidden="true">
+          <svg viewBox="0 0 140 140">
+            <defs>
+              <linearGradient id="rotate-phone" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0%" stop-color="#ff7c52" />
+                <stop offset="100%" stop-color="#59d3ff" />
+              </linearGradient>
+            </defs>
+            <circle cx="70" cy="70" r="58" fill="rgba(255,255,255,0.05)" stroke="rgba(255,255,255,0.12)" stroke-width="2" />
+            <rect x="53" y="22" width="34" height="62" rx="9" fill="url(#rotate-phone)" />
+            <rect x="59" y="28" width="22" height="45" rx="5" fill="#08101b" />
+            <path d="M94 91c9-2 17-7 22-15" fill="none" stroke="rgba(255,255,255,0.82)" stroke-width="6" stroke-linecap="round" />
+            <path d="M116 76l2 14-13-4" fill="none" stroke="rgba(255,255,255,0.82)" stroke-width="6" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+        </div>
+        <strong>يرجى تدوير الهاتف لاستكمال المعركة</strong>
+        <span>اللعبة تعمل بوضع العرض فقط حتى تظهر الساحة وأزرار القتال بالشكل الصحيح.</span>
+      </div>
+    </div>
     <script>
       window.__duelDashBooted = false;
       window.__showBootError = function (message) {

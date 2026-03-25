@@ -133,6 +133,7 @@ const bootRuntime = {
   ready: false,
   progress: 0,
   started: false,
+  exiting: false,
 };
 
 const uiRuntime = {
@@ -146,6 +147,27 @@ const audioRuntime = {
 };
 
 const app = document.getElementById("app");
+let orientationLockAttempted = false;
+
+normalizeProfileState(state);
+
+async function tryLockLandscape() {
+  if (orientationLockAttempted) {
+    return;
+  }
+
+  const orientationApi = globalThis.screen?.orientation;
+  if (!orientationApi?.lock) {
+    return;
+  }
+
+  orientationLockAttempted = true;
+  try {
+    await orientationApi.lock("landscape");
+  } catch (error) {
+    console.error(error);
+  }
+}
 
 function preloadImage(url) {
   return new Promise((resolve) => {
@@ -185,7 +207,12 @@ async function bootAssets() {
   }
 
   bootRuntime.progress = 100;
+  bootRuntime.exiting = true;
+  render();
+  await new Promise((resolve) => setTimeout(resolve, 360));
   bootRuntime.ready = true;
+  bootRuntime.exiting = false;
+  void tryLockLandscape();
   render();
 }
 
@@ -277,6 +304,7 @@ window.addEventListener(
   () => {
     unlockAudio();
     syncAudioForScreen();
+    void tryLockLandscape();
   },
   { once: true },
 );
@@ -309,6 +337,16 @@ function hydrateSettings() {
     };
   } catch {
     return { ...defaultSettings };
+  }
+}
+
+function normalizeProfileState(source) {
+  if (!source?.profile) {
+    return;
+  }
+
+  if (typeof source.profile.gems !== "number") {
+    source.profile.gems = 18;
   }
 }
 
@@ -403,6 +441,7 @@ function createProfile({ name, avatarId, bladeId }) {
     level: 1,
     xp: 0,
     coins: 240,
+    gems: 18,
     wins: 0,
     losses: 0,
     unlockedSkins: [starterSkin.id],
@@ -1299,7 +1338,7 @@ function localizedSkin(id) {
 
 function renderSplash() {
   return `
-    <section class="splash-screen" style="background-image:url('${ASSET_URLS.backgrounds.splash}')">
+    <section class="splash-screen ${bootRuntime.exiting ? "is-exit" : ""}" style="background-image:url('${ASSET_URLS.backgrounds.splash}')">
       <div class="splash-glass">
         <img class="splash-logo" src="${ASSET_URLS.branding.logo}" alt="Duel Dash" />
         <div class="eyebrow">تجهيز موارد اللعبة</div>
@@ -1333,12 +1372,13 @@ function actionButton(action, detail) {
 
   return `
     <button class="ability-card ${action}" data-action="${action}" ${disabled ? "disabled" : ""}>
-      <span class="ability-icon-wrap">
-        <img class="ability-icon" src="${getAbilityImage(action)}" alt="${detail.title}" />
-        <span class="cooldown-mask" style="height:${percent}%;"></span>
+      <span class="ability-core">
+        <span class="ability-icon-wrap">
+          <span class="ability-svg-icon">${renderAbilityGlyph(action)}</span>
+          <span class="cooldown-mask" style="height:${percent}%;"></span>
+        </span>
       </span>
       <strong>${detail.title}</strong>
-      <span>${detail.copy}</span>
       <small>${detail.tag}</small>
     </button>
   `;
@@ -1446,6 +1486,116 @@ function localizedTone(tone) {
   return labels[tone] || tone;
 }
 
+function renderAvatarBadge(avatar) {
+  return `
+    <svg viewBox="0 0 88 88" class="avatar-badge-svg" aria-hidden="true">
+      <defs>
+        <linearGradient id="avatar-${avatar.id}" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stop-color="${avatar.gradient.match(/#(?:[0-9a-fA-F]{3}){1,2}/g)?.[0] || "#ff7c52"}" />
+          <stop offset="100%" stop-color="${avatar.gradient.match(/#(?:[0-9a-fA-F]{3}){1,2}/g)?.[1] || "#ffd372"}" />
+        </linearGradient>
+      </defs>
+      <rect x="5" y="5" width="78" height="78" rx="24" fill="#0a101b" />
+      <rect x="10" y="10" width="68" height="68" rx="20" fill="url(#avatar-${avatar.id})" />
+      <circle cx="44" cy="30" r="14" fill="rgba(255,255,255,.2)" />
+      <path d="M25 66c3-12 12-18 19-18s16 6 19 18" fill="rgba(11,16,27,.24)" />
+      <text x="44" y="56" text-anchor="middle" font-size="24" font-weight="800" fill="#fff6eb" font-family="Arial">${avatar.sigil}</text>
+    </svg>
+  `;
+}
+
+function renderCoinIcon() {
+  return `
+    <svg viewBox="0 0 32 32" class="currency-icon coin-icon" aria-hidden="true">
+      <defs>
+        <radialGradient id="coin-core" cx="35%" cy="30%" r="70%">
+          <stop offset="0%" stop-color="#fff5be" />
+          <stop offset="60%" stop-color="#ffd669" />
+          <stop offset="100%" stop-color="#ff9f3f" />
+        </radialGradient>
+      </defs>
+      <circle cx="16" cy="16" r="13" fill="url(#coin-core)" />
+      <circle cx="16" cy="16" r="9.5" fill="none" stroke="rgba(120,68,10,.4)" stroke-width="2" />
+      <path d="M12 16h8M16 12v8" stroke="rgba(120,68,10,.55)" stroke-width="2.2" stroke-linecap="round" />
+    </svg>
+  `;
+}
+
+function renderGemIcon() {
+  return `
+    <svg viewBox="0 0 32 32" class="currency-icon gem-icon" aria-hidden="true">
+      <defs>
+        <linearGradient id="gem-core" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stop-color="#cbf9ff" />
+          <stop offset="50%" stop-color="#65cfff" />
+          <stop offset="100%" stop-color="#4f79ff" />
+        </linearGradient>
+      </defs>
+      <path d="M16 3l10 8-10 18L6 11 16 3Z" fill="url(#gem-core)" />
+      <path d="M16 3v26M6 11h20" stroke="rgba(255,255,255,.42)" stroke-width="1.5" />
+    </svg>
+  `;
+}
+
+function gradientColors(gradient, fallback = ["#ff7c52", "#ffd372"]) {
+  const matches = String(gradient || "").match(/#(?:[0-9a-fA-F]{3}){1,2}/g);
+  if (!matches || matches.length < 2) {
+    return fallback;
+  }
+  return [matches[0], matches[1]];
+}
+
+function renderCombatantSvg(fighter, side) {
+  const [primary, secondary] = gradientColors(fighter.gradient, side === "player" ? ["#ff7c52", "#ffd372"] : ["#59d3ff", "#7b7dff"]);
+  return `
+    <svg viewBox="0 0 220 320" class="combatant-svg" aria-hidden="true">
+      <defs>
+        <linearGradient id="body-${side}" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stop-color="${primary}" />
+          <stop offset="100%" stop-color="${secondary}" />
+        </linearGradient>
+        <linearGradient id="visor-${side}" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0%" stop-color="#cbf9ff" />
+          <stop offset="100%" stop-color="#5de3ff" />
+        </linearGradient>
+      </defs>
+      <ellipse cx="110" cy="300" rx="58" ry="16" fill="rgba(0,0,0,.28)" />
+      <g>
+        <path d="M110 24l38 22v40l-38 18-38-18V46z" fill="url(#body-${side})" stroke="rgba(255,255,255,.18)" stroke-width="4" />
+        <rect x="78" y="58" width="64" height="16" rx="8" fill="url(#visor-${side})" opacity=".92" />
+        <path d="M86 104h48l24 44-18 70h-16l-6-52h-16l-6 52H80l-18-70z" fill="url(#body-${side})" stroke="rgba(255,255,255,.12)" stroke-width="4" />
+        <path d="M76 114l-26 34 20 14 26-30zM144 114l26 34-20 14-26-30z" fill="${secondary}" opacity=".95" />
+        <path d="M82 220l-14 62h24l14-54zM138 220l14 62h-24l-14-54z" fill="${primary}" opacity=".92" />
+        <path d="M158 142l34 60-18 8-36-56z" fill="#d6f8ff" opacity=".9" />
+        <circle cx="110" cy="124" r="8" fill="#fff7e8" opacity=".85" />
+      </g>
+    </svg>
+  `;
+}
+
+function renderAbilityGlyph(action) {
+  const icons = {
+    attack: `
+      <svg viewBox="0 0 48 48" aria-hidden="true">
+        <path d="M29 6l13 13-4 4-5-5-12 12-3 10 10-3 12-12-5-5 4-4 7 7-15 15-18 6 6-18z" fill="#fff7e8" />
+      </svg>
+    `,
+    dash: `
+      <svg viewBox="0 0 48 48" aria-hidden="true">
+        <path d="M24 6l14 6v10c0 8-5 14-14 20C15 36 10 30 10 22V12z" fill="#fff7e8" />
+        <path d="M24 14l4 8h8l-6 5 2 8-8-5-8 5 2-8-6-5h8z" fill="rgba(11,16,27,.42)" />
+      </svg>
+    `,
+    special: `
+      <svg viewBox="0 0 48 48" aria-hidden="true">
+        <path d="M26 4L10 26h10l-2 18 20-26H28z" fill="#fff7e8" />
+      </svg>
+    `,
+  };
+
+  return icons[action] || icons.attack;
+}
+
 function renderHome() {
   const profile = state.profile;
   if (!profile) {
@@ -1459,6 +1609,36 @@ function renderHome() {
 
   return `
     <section class="game-screen stack reveal">
+      <article class="lobby-banner panel">
+        <div class="lobby-banner-main">
+          <div class="lobby-avatar-badge">
+            ${renderAvatarBadge(avatar)}
+          </div>
+          <div class="lobby-banner-copy">
+            <span class="eyebrow">ملف اللاعب</span>
+            <strong>${profile.name}</strong>
+            <span>المستوى ${profile.level} · ${localizedAvatar(avatar.id)}</span>
+          </div>
+        </div>
+
+        <div class="lobby-currency-bar">
+          <div class="currency-chip coin">
+            ${renderCoinIcon()}
+            <div>
+              <span>Coins</span>
+              <strong>${profile.coins}</strong>
+            </div>
+          </div>
+          <div class="currency-chip gem">
+            ${renderGemIcon()}
+            <div>
+              <span>Gems</span>
+              <strong>${profile.gems}</strong>
+            </div>
+          </div>
+        </div>
+      </article>
+
       <article class="hero-panel lobby-hero" style="background-image:url('${ASSET_URLS.backgrounds.lobby}')">
         <div class="hero-topline">
           <span class="eyebrow">اللوبي الرئيسي</span>
@@ -1476,10 +1656,10 @@ function renderHome() {
           <div class="hero-player-copy">
             <div class="profile-strip">
               <span class="panel-pill">المستوى ${profile.level}</span>
-              <span class="coin-pill">${profile.coins} كوين</span>
+              <span class="coin-pill">${localizedBlade(blade.id)}</span>
             </div>
             <h1 class="display-title">جاهز للمواجهة يا ${profile.name}</h1>
-            <p class="subtitle">اختر تجهيزتك، افتح غرفة، وابدأ قتال 1v1 مباشر من الآيفون وكأنها لعبة مثبتة فعلاً.</p>
+            <p class="subtitle">واجهة عربية بالكامل، إحساس قريب من التطبيق المثبت، وتجهيزات مرئية جاهزة للانتقال إلى القتال.</p>
 
             <div class="xp-card">
               <div class="xp-card-head">
@@ -1496,7 +1676,7 @@ function renderHome() {
         <div class="panel-head">
           <div>
             <h2>بطاقة اللاعب</h2>
-            <p>هوية سريعة تشبه حسابات الألعاب: اسم، مستوى، عملات، وكود استرجاع محفوظ.</p>
+            <p>اسم، مستوى، معدل الفوز، وكود استرجاع محفوظ داخل تجربة تشبه واجهات ألعاب الموبايل.</p>
           </div>
           <button class="panel-pill" data-open-overlay="locker">الخزنة</button>
         </div>
@@ -1583,7 +1763,9 @@ function renderHome() {
         </div>
       </article>
 
-      <button class="btn btn-play btn-play-xl" data-nav="duel">ابدأ مواجهة سريعة</button>
+      <div class="home-cta-wrap">
+        <button class="btn btn-play btn-play-xl" data-nav="rooms">ابحث عن خصم</button>
+      </div>
     </section>
   `;
 }
@@ -2095,6 +2277,130 @@ function renderDuelGame() {
   `;
 }
 
+function renderDuelGame() {
+  const duel = state.duel;
+  if (!duel) {
+    return "";
+  }
+
+  const timeLeft = duelTimeLeft();
+  const playerHp = Math.max(0, Math.round(duel.player.hp));
+  const rivalHp = Math.max(0, Math.round(duel.rival.hp));
+  const resultText =
+    duel.status === "done"
+      ? duel.winner === "player"
+        ? "انتصار"
+        : "هزيمة"
+      : duel.mode === "practice"
+        ? "تجريب سريع"
+        : duel.roomCode || "مبارزة حية";
+
+  return `
+    <section class="game-screen duel-screen reveal">
+      <article class="battle-shell ${uiRuntime.shakeUntil > Date.now() ? "is-shaking" : ""}">
+        <div class="battle-backdrop">
+          <span class="battle-layer layer-far"></span>
+          <span class="battle-layer layer-mid"></span>
+          <span class="battle-layer layer-neon"></span>
+        </div>
+
+        <div class="battle-hud">
+          <div class="battle-health-card player ${duel.player.flash}">
+            <div class="health-meta">
+              <strong>${duel.player.name}</strong>
+              <span>${playerHp} / 100 HP</span>
+            </div>
+            <div class="hp-frame">
+              <div class="hp-track game player">
+                <div class="hp-fill" style="width:${playerHp}%;"></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="battle-center-hud">
+            <span class="timer-badge">${timeLeft}</span>
+            <strong>${resultText}</strong>
+            <small>${duel.mode === "practice" ? "مواجهة تدريب" : "مواجهة أونلاين"}</small>
+          </div>
+
+          <div class="battle-health-card rival ${duel.rival.flash}">
+            <div class="health-meta">
+              <strong>${duel.rival.name}</strong>
+              <span>${rivalHp} / 100 HP</span>
+            </div>
+            <div class="hp-frame">
+              <div class="hp-track game rival">
+                <div class="hp-fill" style="width:${rivalHp}%;"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="arena-stage">
+          <div class="arena-vfx-layer">
+            ${renderFloatingTexts()}
+          </div>
+          <div class="arena-floor"></div>
+
+          <div class="arena-fighter arena-player ${duel.player.flash}">
+            <div class="combatant idle">
+              ${renderCombatantSvg(duel.player, "player")}
+            </div>
+            <div class="fighter-charge player">
+              <span>شحن</span>
+              <div class="charge-track"><div class="charge-fill" style="width:${duel.player.charge}%;"></div></div>
+            </div>
+          </div>
+
+          <div class="arena-fighter arena-rival ${duel.rival.flash}">
+            <div class="combatant idle rival">
+              ${renderCombatantSvg(duel.rival, "rival")}
+            </div>
+            <div class="fighter-charge rival">
+              <span>شحن</span>
+              <div class="charge-track rival"><div class="charge-fill" style="width:${duel.rival.charge}%;"></div></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="battle-controls">
+          ${actionButton("attack", {
+            title: "ضربة",
+            tag: "هجوم",
+          })}
+          ${actionButton("dash", {
+            title: "تفادٍ",
+            tag: "دفاع",
+          })}
+          ${actionButton("special", {
+            title: "طاقة",
+            tag: "خاص",
+          })}
+        </div>
+
+        <div class="battle-feed">
+          <button class="panel-pill battle-exit" data-duel="${duel.mode === "practice" ? "restart" : "rooms"}">
+            ${duel.mode === "practice" ? "إعادة اللعب" : "العودة للغرفة"}
+          </button>
+          <div class="battle-feed-list">
+            ${duel.log
+              .slice(0, 3)
+              .map(
+                (entry) => `
+                  <div class="combat-log-item ${entry.tone}">
+                    <strong>${localizedTone(entry.tone)}</strong>
+                    <span>${entry.text}</span>
+                  </div>
+                `,
+              )
+              .join("")}
+          </div>
+        </div>
+      </article>
+    </section>
+  `;
+}
+
 function lockerOverlayGame() {
   const profile = state.profile;
   const selectedSkin = currentSkin();
@@ -2197,7 +2503,13 @@ function renderToastGame() {
 }
 
 function renderNavGame() {
-  if (!state.profile || state.screen === "onboarding" || state.screen === "duel" || !bootRuntime.ready) {
+  if (
+    !state.profile ||
+    state.screen === "onboarding" ||
+    state.screen === "duel" ||
+    state.screen === "home" ||
+    !bootRuntime.ready
+  ) {
     return "";
   }
 
